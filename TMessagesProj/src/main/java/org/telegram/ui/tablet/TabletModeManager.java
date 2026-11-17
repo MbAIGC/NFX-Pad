@@ -1,0 +1,47 @@
+package org.telegram.ui.tablet;
+
+import android.content.res.Configuration;
+
+import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.ApplicationLoader;
+
+import tw.nekomimi.nekogram.NekoConfig;
+
+/**
+ * Single gate for the "Enhanced Tablet Mode" feature.
+ *
+ * <p>Deliberately NOT built on {@link AndroidUtilities#isTablet()}: in this fork that value can be
+ * forced on a phone or disabled on a tablet by the user ({@code NekoConfig#tabletMode}), so it
+ * describes "tablet-ness" rather than "the dual pane layout is actually on screen". The predicate
+ * below mirrors {@code LaunchActivity#isTabletSplitMode()}, which is what the shell really renders.
+ */
+public final class TabletModeManager {
+
+    private TabletModeManager() {
+    }
+
+    /** The user facing switch, default off. */
+    public static boolean isEnabled() {
+        return NekoConfig.tabletOptimizedMode != null && NekoConfig.tabletOptimizedMode.Bool();
+    }
+
+    /** True only when the switch is on <em>and</em> the split (dual pane) tablet layout is in use. */
+    public static boolean shouldApplyEnhancedMode() {
+        return isEnabled() && isTabletSplitLayout();
+    }
+
+    /** Mirrors {@code LaunchActivity#isTabletSplitMode()}. */
+    public static boolean isTabletSplitLayout() {
+        if (!AndroidUtilities.isTabletInternal() || AndroidUtilities.isInMultiwindow) {
+            return false;
+        }
+        if (AndroidUtilities.isSmallTablet()) {
+            if (ApplicationLoader.applicationContext == null) {
+                return false;
+            }
+            return ApplicationLoader.applicationContext.getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_LANDSCAPE;
+        }
+        return true;
+    }
+}

@@ -85,6 +85,7 @@ public class NekoConfig {
     public static ConfigItem hidePhone = addConfig("HidePhone", configTypeBool, true);
     public static ConfigItem ignoreBlocked = addConfig("IgnoreBlocked", configTypeBool, false);
     public static ConfigItem tabletMode = addConfig("TabletMode", configTypeInt, 0);
+    public static ConfigItem tabletOptimizedMode = addConfig("TabletOptimizedMode", configTypeBool, false);
 
     public static ConfigItem typeface = addConfig("TypefaceUseDefault", configTypeBool, false);
     public static ConfigItem forceFontWeightFallback = addConfig("forceFontWeightFallback", configTypeBool, false);

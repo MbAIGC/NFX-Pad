@@ -107,6 +107,10 @@ public class NekoAppearanceSettingsActivity extends BaseNekoXSettingsActivity {
             getString(R.string.Enable),
             getString(R.string.Disable)
     }, null));
+    private final AbstractConfigCell tabletOptimizedModeRow = cellGroup.appendCell(new ConfigCellTextCheck(
+            NekoConfig.tabletOptimizedMode,
+            getString(R.string.TabletOptimizedModeInfo),
+            getString(R.string.TabletOptimizedMode)));
     private final AbstractConfigCell dividerAppearance = cellGroup.appendCell(new ConfigCellDivider());
     private final AbstractConfigCell avatarCornersPreviewRow = cellGroup.appendCell(new ConfigCellCustom("AvatarCorners", ConfigCellCustom.CUSTOM_ITEM_AvatarCorners, false));
     private final AbstractConfigCell singleCornerRadiusRow = cellGroup.appendCell(
@@ -270,6 +274,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoXSettingsActivity {
                 getNotificationCenter().postNotificationName(NotificationCenter.dialogFiltersUpdated);
             } else if (key.equals(NaConfig.INSTANCE.getNotificationIcon().getKey())
                     || key.equals(NekoConfig.tabletMode.getKey())
+                    || key.equals(NekoConfig.tabletOptimizedMode.getKey())
                     || key.equals(NaConfig.INSTANCE.getHideDividers().getKey())
                     || key.equals(NekoConfig.typeface.getKey())
                     || key.equals(NaConfig.INSTANCE.getHidePremiumSection().getKey())
