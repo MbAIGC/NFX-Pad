@@ -871,6 +871,7 @@ public class ChatActivity extends BaseFragment implements
      */
     private boolean searchListRestorePending;
     private int searchListRestorePosition = -1;
+    private int searchListRestoreMessageId;
     private ChatActivityMessageMetricsView messageMetricsView;
 
     public static final int MODE_DEFAULT = 0;
@@ -8546,6 +8547,8 @@ public class ChatActivity extends BaseFragment implements
             } else {
                 getMediaDataController().jumpToSearchedMessage(classGuid, position);
                 if (TabletModeManager.shouldApplyEnhancedMode()) {
+                    final Object picked = messagesSearchAdapter.getItem(position);
+                    searchListRestoreMessageId = picked instanceof MessageObject ? ((MessageObject) picked).getId() : 0;
                     searchListRestorePosition = position;
                     searchListRestorePending = true;
                 }
@@ -14788,6 +14791,21 @@ public class ChatActivity extends BaseFragment implements
         }
         hideHints();
         updateSearchCountText();
+    }
+
+    /** Adapter position of the given message in the results overlay, or -1 when it is not there anymore. */
+    private int findSearchResultPositionById(int messageId) {
+        if (messagesSearchAdapter == null || messageId == 0) {
+            return -1;
+        }
+        final int count = messagesSearchAdapter.getItemCount();
+        for (int i = 0; i < count; i++) {
+            final Object item = messagesSearchAdapter.getItem(i);
+            if (item instanceof MessageObject && ((MessageObject) item).getId() == messageId) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     public boolean playFirstUnreadVoiceMessage() {
@@ -29950,10 +29968,16 @@ public class ChatActivity extends BaseFragment implements
         if (searchListRestorePending) {
             searchListRestorePending = false;
             final int position = searchListRestorePosition;
+            final int messageId = searchListRestoreMessageId;
             searchListRestorePosition = -1;
+            searchListRestoreMessageId = 0;
             if (searching && messagesSearchListView != null && messagesSearchListView.getLayoutManager() != null) {
-                if (position >= 0) {
-                    messagesSearchListView.getLayoutManager().scrollToPosition(position);
+                // prefer the message id: the result list can lose or gain entries while the page is in the
+                // background, and a stale row index would then scroll to an unrelated message
+                final int restoredPosition = findSearchResultPositionById(messageId);
+                final int target = restoredPosition >= 0 ? restoredPosition : position;
+                if (target >= 0) {
+                    messagesSearchListView.getLayoutManager().scrollToPosition(target);
                 }
                 // the search session is still alive, so this only re-shows the cached results: no new request
                 showMessagesSearchListView(true);
