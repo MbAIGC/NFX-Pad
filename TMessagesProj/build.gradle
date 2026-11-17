@@ -261,6 +261,8 @@ android {
             jniDebuggable = false
             multiDexEnabled = true
             signingConfig = signingConfigs.release
+            // so a self built test APK can be installed next to the official app instead of replacing it
+            applicationIdSuffix '.nfxp'
         }
 
         staging {
@@ -272,6 +274,8 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             matchingFallbacks = ['release', 'staging', 'debug']
             signingConfig = signingConfigs.release
+            // so a self built test APK can be installed next to the official app instead of replacing it
+            applicationIdSuffix '.nfxp'
         }
 
         release {
