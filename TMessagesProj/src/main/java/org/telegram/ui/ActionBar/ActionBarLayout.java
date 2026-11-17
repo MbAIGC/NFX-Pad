@@ -8,6 +8,8 @@
 
 package org.telegram.ui.ActionBar;
 
+import org.telegram.ui.tablet.TabletDebugLog;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.AndroidUtilities.lerp;
@@ -1880,6 +1882,10 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
      */
     public boolean onBackPressedInternal() {
         if (transitionAnimationPreviewMode || startedTracking || checkTransitionAnimation() || fragmentsStack.isEmpty()) {
+            TabletDebugLog.d("abl", "guard blocks preview=" + transitionAnimationPreviewMode
+                    + " startedTracking=" + startedTracking
+                    + " transition=" + checkTransitionAnimation()
+                    + " empty=" + fragmentsStack.isEmpty());
             return false;
         }
         if (GroupCallPip.onBackPressed()) {
@@ -1897,7 +1903,9 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
             return false;
         }
         BaseFragment lastFragment = fragmentsStack.get(fragmentsStack.size() - 1);
-        return lastFragment.onBackPressed(true);
+        boolean wantsClose = lastFragment.onBackPressed(true);
+        TabletDebugLog.d("abl", "fragment=" + lastFragment.getClass().getSimpleName() + " wantsClose=" + wantsClose);
+        return wantsClose;
     }
 
     @Override

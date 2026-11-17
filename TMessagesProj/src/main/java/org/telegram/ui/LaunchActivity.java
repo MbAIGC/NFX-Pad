@@ -8,6 +8,8 @@
 
 package org.telegram.ui;
 
+import org.telegram.ui.tablet.TabletDebugLog;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.formatPluralString;
 import static org.telegram.messenger.LocaleController.formatString;
@@ -833,6 +835,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
                     @Override
                     public void onBackInvoked() {
+                        TabletDebugLog.d("back", "onBackInvoked backGestureLayout=" + (backGestureLayout != null));
                         invoked = true;
                         if (locked) {
                             locker.unlock();
@@ -962,6 +965,22 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 frameMetricsOverlayView = null;
             }
         }
+    }
+
+    private String topFragmentName() {
+        try {
+            if (layersActionBarLayout != null && layersActionBarLayout.getView().getVisibility() == View.VISIBLE && !layersActionBarLayout.getFragmentStack().isEmpty()) {
+                return "layers:" + layersActionBarLayout.getFragmentStack().get(layersActionBarLayout.getFragmentStack().size() - 1).getClass().getSimpleName();
+            }
+            if (rightActionBarLayout != null && rightActionBarLayout.getView().getVisibility() == View.VISIBLE && !rightActionBarLayout.getFragmentStack().isEmpty()) {
+                return "right:" + rightActionBarLayout.getFragmentStack().get(rightActionBarLayout.getFragmentStack().size() - 1).getClass().getSimpleName();
+            }
+            if (actionBarLayout != null && !actionBarLayout.getFragmentStack().isEmpty()) {
+                return "main:" + actionBarLayout.getFragmentStack().get(actionBarLayout.getFragmentStack().size() - 1).getClass().getSimpleName();
+            }
+        } catch (Throwable ignore) {
+        }
+        return "none";
     }
 
     private Object onBackAnimationCallback;
@@ -9478,9 +9497,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     @Override
     public void onBackPressed() {
         if (!onBackPressed(true)) {
+            TabletDebugLog.d("back", "consumed before dispatch");
             return;
         }
         if (AndroidUtilities.isTablet()) {
+            TabletDebugLog.d("back", "tablet dispatch rightStack="
+                    + (rightActionBarLayout == null ? -1 : rightActionBarLayout.getFragmentStack().size())
+                    + " mainStack=" + actionBarLayout.getFragmentStack().size()
+                    + " top=" + topFragmentName());
             if (layersActionBarLayout != null && layersActionBarLayout.getView().getVisibility() == View.VISIBLE) {
                 layersActionBarLayout.onBackPressed();
             } else {
@@ -9728,6 +9752,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 layout == rightActionBarLayout && (rightActionBarLayout.getFragmentStack().size() > 1 || !(rightActionBarLayout.getLastFragment() instanceof ChatActivity))
             ) {
                 if (!tabletFullSize && layout == rightActionBarLayout || tabletFullSize && layout == actionBarLayout) {
+                    TabletDebugLog.d("route", "keep stack: presenting " + fragment.getClass().getSimpleName()
+                            + " into layout=" + (layout == actionBarLayout ? "main" : "right")
+                            + " stackSize=" + layout.getFragmentStack().size());
                     if (layout == rightActionBarLayout) {
                         if (rightActionBarLayout.getView() != null) {
                             rightActionBarLayout.getView().setVisibility(View.VISIBLE);
@@ -9747,6 +9774,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                     return result;
                 } else if (!tabletFullSize && layout != rightActionBarLayout && rightActionBarLayout != null) {
+                    TabletDebugLog.d("route", "WIPE right pane: presenting " + fragment.getClass().getSimpleName()
+                            + " from layout=" + (layout == actionBarLayout ? "main" : layout == layersActionBarLayout ? "layers" : "other")
+                            + " rightStack=" + rightActionBarLayout.getFragmentStack().size());
                     if (rightActionBarLayout.getView() != null) {
                         rightActionBarLayout.getView().setVisibility(View.VISIBLE);
                     }

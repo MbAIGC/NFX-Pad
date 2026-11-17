@@ -9,6 +9,8 @@
 
 package org.telegram.ui;
 
+import org.telegram.ui.tablet.TabletDebugLog;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.lerp;
 import static org.telegram.messenger.LocaleController.formatPluralStringComma;
@@ -30041,6 +30043,12 @@ public class ChatActivity extends BaseFragment implements
     public void onBecomeFullyVisible() {
         isFullyVisible = true;
         super.onBecomeFullyVisible();
+        TabletDebugLog.d("chat", "fullyVisible searching=" + searching
+                + " query=" + searchingQuery
+                + " hashtag=" + searchingHashtag
+                + " listVisible=" + isMessagesSearchListVisible()
+                + " restorePending=" + searchListRestorePending
+                + " hashtagPending=" + hashtagSearchRestorePending);
         if (searchListRestorePending) {
             searchListRestorePending = false;
             final int position = searchListRestorePosition;
@@ -30204,6 +30212,10 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onBecomeFullyHidden() {
+        TabletDebugLog.d("chat", "fullyHidden searching=" + searching
+                + " query=" + searchingQuery
+                + " hashtag=" + searchingHashtag
+                + " listVisible=" + isMessagesSearchListVisible());
         saveHashtagSearchSnapshotIfNeeded();
         hideTagSelector();
         if (!getMessagesController().premiumFeaturesBlocked() && getMessagesController().transcribeAudioTrialWeeklyNumber <= 0 && !getMessagesController().didPressTranscribeButtonEnough() && !getUserConfig().isPremium() && messages != null) {
@@ -38573,6 +38585,7 @@ public class ChatActivity extends BaseFragment implements
             if (invoked) forwardingPreviewView.dismiss(true);
             return false;
         } else if (isMessagesSearchListVisible()) {
+            TabletDebugLog.d("chat", "back closes search list");
             if (invoked) showMessagesSearchListView(false);
             return false;
         } else if (scrimPopupWindow != null) {

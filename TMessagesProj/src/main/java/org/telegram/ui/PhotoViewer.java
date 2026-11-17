@@ -8,6 +8,8 @@
 
 package org.telegram.ui;
 
+import org.telegram.ui.tablet.TabletDebugLog;
+
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.AndroidUtilities.dpf2;
 import static org.telegram.messenger.AndroidUtilities.lerp;
@@ -10005,6 +10007,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
         final int delta = gestureBottom - reportedBottom;
         final int newOffset = delta > 0 ? delta + dp(8) : 0;
+        TabletDebugLog.d("media", "insets reportedBottom=" + reportedBottom
+                + " mandatory=" + compat.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures()).bottom
+                + " systemGestures=" + compat.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom
+                + " navBars=" + compat.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+                + " delta=" + delta + " offset=" + newOffset
+                + " gestureNav=" + tw.nekomimi.nekogram.utils.AndroidUtil.isGestureNavigation(containerView.getContext()));
         if (newOffset == videoControlsGestureOffset) {
             return;
         }
@@ -18032,11 +18040,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             onShowView();
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                TabletDebugLog.d("media", "registering own back callback, focusable=" + windowView.isFocusable());
                 final OnBackInvokedDispatcher dispatcher = windowView.findOnBackInvokedDispatcher();
                 if (dispatcher != null) {
                     dispatcher.registerOnBackInvokedCallback(
                         OnBackInvokedDispatcher.PRIORITY_DEFAULT,
                         () -> {
+                            TabletDebugLog.d("media", "photo window back callback, visible=" + isVisible());
                             if (parentActivity instanceof LaunchActivity) {
                                 ((LaunchActivity) parentActivity).onBackPressed();
                             } else {
