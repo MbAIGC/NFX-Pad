@@ -5,6 +5,14 @@ name: Publish APK release
 # release without rebuilding (~2 minutes instead of ~16).
 
 on:
+  # workflow_dispatch only shows up when the file is on the default branch, so a push marker is
+  # the trigger that works from a feature branch too.
+  push:
+    branches:
+      - 'feature/**'
+    paths:
+      - '.github/workflows/publish.yml'
+      - 'release-trigger/**'
   workflow_dispatch:
     inputs:
       run_id:
@@ -21,6 +29,7 @@ permissions:
 jobs:
   publish:
     name: Attach artifact to a release
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[publish]')
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
