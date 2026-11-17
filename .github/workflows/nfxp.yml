@@ -104,8 +104,9 @@ jobs:
           if-no-files-found: warn
       - name: Publish release
         # Attaching the APKs to a release makes them downloadable without signing in to Actions.
-        # Trigger it from the Actions tab (Run workflow -> release) instead of on every push.
-        if: success() && github.event_name == 'workflow_dispatch' && inputs.release
+        # Publishing straight from the runner avoids downloading the artifacts and uploading them again.
+        # Runs on "Run workflow" with release checked, or on any push whose commit message has [release].
+        if: success() && (inputs.release || contains(github.event.head_commit.message, '[release]'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
