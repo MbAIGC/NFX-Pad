@@ -872,6 +872,15 @@ public class ChatActivity extends BaseFragment implements
     private boolean searchListRestorePending;
     private int searchListRestorePosition = -1;
     private int searchListRestoreMessageId;
+    /**
+     * Enhanced Tablet Mode: the hashtag / public posts result pages are Views owned by searchViewPager, not
+     * fragments, and onSearchCollapse() destroys them (clearViews()). Re-showing is not an option there, so the
+     * session is remembered and rebuilt on return.
+     */
+    private boolean hashtagSearchRestorePending;
+    private String hashtagSearchRestoreHashtag;
+    private int hashtagSearchRestorePage;
+    private int hashtagSearchRestoreMessageId;
     private ChatActivityMessageMetricsView messageMetricsView;
 
     public static final int MODE_DEFAULT = 0;
@@ -14806,6 +14815,73 @@ public class ChatActivity extends BaseFragment implements
             }
         }
         return -1;
+    }
+
+    /** Remembers the hashtag search pager contents before the page is covered by another fragment. */
+    private void saveHashtagSearchSnapshotIfNeeded() {
+        if (searchViewPager == null || !TabletModeManager.shouldApplyEnhancedMode()) {
+            return;
+        }
+        if (!searching || TextUtils.isEmpty(searchingHashtag)) {
+            return;
+        }
+        final View current = searchViewPager.getCurrentView();
+        if (!(current instanceof ChatActivityContainer)) {
+            return;
+        }
+        final ChatActivity child = ((ChatActivityContainer) current).chatActivity;
+        int messageId = 0;
+        if (child.messagesSearchListView != null && child.messagesSearchListView.getLayoutManager() instanceof LinearLayoutManager) {
+            final int position = ((LinearLayoutManager) child.messagesSearchListView.getLayoutManager()).findFirstVisibleItemPosition();
+            final Object item = child.messagesSearchAdapter == null ? null : child.messagesSearchAdapter.getItem(position);
+            if (item instanceof MessageObject) {
+                messageId = ((MessageObject) item).getId();
+            }
+        }
+        hashtagSearchRestoreHashtag = searchingHashtag;
+        hashtagSearchRestorePage = hashtagSearchTabs != null && hashtagSearchTabs.tabs != null ? hashtagSearchTabs.tabs.getCurrentPosition() : 0;
+        hashtagSearchRestoreMessageId = messageId;
+        hashtagSearchRestorePending = true;
+    }
+
+    /** Rebuilds the hashtag search pager if it was destroyed while the page was covered. */
+    private void restoreHashtagSearchSnapshotIfNeeded() {
+        if (!hashtagSearchRestorePending) {
+            return;
+        }
+        hashtagSearchRestorePending = false;
+        final String hashtag = hashtagSearchRestoreHashtag;
+        final int page = hashtagSearchRestorePage;
+        final int messageId = hashtagSearchRestoreMessageId;
+        hashtagSearchRestoreHashtag = null;
+        hashtagSearchRestoreMessageId = 0;
+        if (TextUtils.isEmpty(hashtag) || searchViewPager == null) {
+            return;
+        }
+        if (searchViewPager.getCurrentView() != null) {
+            // the pages survived the round trip, so nothing has to be rebuilt
+            return;
+        }
+        openHashtagSearch(hashtag);
+        if (page > 0 && hashtagSearchTabs != null && hashtagSearchTabs.tabs != null) {
+            hashtagSearchTabs.tabs.scrollToTab(page, page);
+        }
+        if (messageId != 0) {
+            AndroidUtilities.runOnUIThread(() -> {
+                if (searchViewPager == null) {
+                    return;
+                }
+                final View current = searchViewPager.getCurrentView();
+                if (!(current instanceof ChatActivityContainer)) {
+                    return;
+                }
+                final ChatActivity child = ((ChatActivityContainer) current).chatActivity;
+                final int position = child.findSearchResultPositionById(messageId);
+                if (position >= 0 && child.messagesSearchListView != null && child.messagesSearchListView.getLayoutManager() != null) {
+                    child.messagesSearchListView.getLayoutManager().scrollToPosition(position);
+                }
+            }, 300);
+        }
     }
 
     public boolean playFirstUnreadVoiceMessage() {
@@ -29983,6 +30059,7 @@ public class ChatActivity extends BaseFragment implements
                 showMessagesSearchListView(true);
             }
         }
+        restoreHashtagSearchSnapshotIfNeeded();
         if (showCloseChatDialogLater) {
             showDialog(closeChatDialog);
         }
@@ -30127,6 +30204,7 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onBecomeFullyHidden() {
+        saveHashtagSearchSnapshotIfNeeded();
         hideTagSelector();
         if (!getMessagesController().premiumFeaturesBlocked() && getMessagesController().transcribeAudioTrialWeeklyNumber <= 0 && !getMessagesController().didPressTranscribeButtonEnough() && !getUserConfig().isPremium() && messages != null) {
             for (int i = 0; i < messages.size(); ++i) {
@@ -42566,6 +42644,9 @@ public class ChatActivity extends BaseFragment implements
             searching = false;
             searchListRestorePending = false;
             searchListRestorePosition = -1;
+            hashtagSearchRestorePending = false;
+            hashtagSearchRestoreHashtag = null;
+            hashtagSearchRestoreMessageId = 0;
             updatePagedownButtonVisibility(true);
             updateSearchUpDownButtonVisibility(true);
             if (searchCalendarButton != null) {
