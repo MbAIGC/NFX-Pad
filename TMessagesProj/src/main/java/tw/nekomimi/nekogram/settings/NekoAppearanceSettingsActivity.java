@@ -111,6 +111,14 @@ public class NekoAppearanceSettingsActivity extends BaseNekoXSettingsActivity {
             NekoConfig.tabletOptimizedMode,
             getString(R.string.TabletOptimizedModeInfo),
             getString(R.string.TabletOptimizedMode)));
+    private final AbstractConfigCell tabletVideoInsetRow = cellGroup.appendCell(new ConfigCellSelectBox(null, NekoConfig.tabletVideoExtraBottomInset, new String[]{
+            "Auto",
+            "+0 dp",
+            "+8 dp",
+            "+16 dp",
+            "+24 dp",
+            "+32 dp"
+    }, null));
     private final AbstractConfigCell dividerAppearance = cellGroup.appendCell(new ConfigCellDivider());
     private final AbstractConfigCell avatarCornersPreviewRow = cellGroup.appendCell(new ConfigCellCustom("AvatarCorners", ConfigCellCustom.CUSTOM_ITEM_AvatarCorners, false));
     private final AbstractConfigCell singleCornerRadiusRow = cellGroup.appendCell(

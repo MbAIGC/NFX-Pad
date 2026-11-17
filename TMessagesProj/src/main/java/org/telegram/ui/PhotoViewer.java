@@ -10006,12 +10006,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             return;
         }
         final int delta = gestureBottom - reportedBottom;
-        final int newOffset = delta > 0 ? delta + dp(8) : 0;
+        final int extraDp = TabletModeManager.getVideoControlsExtraInsetDp();
+        final int extra = dp(extraDp >= 0 ? extraDp : 8);
+        final int newOffset = delta > 0 ? delta + extra : 0;
         TabletDebugLog.d("media", "insets reportedBottom=" + reportedBottom
                 + " mandatory=" + compat.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures()).bottom
                 + " systemGestures=" + compat.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom
                 + " navBars=" + compat.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-                + " delta=" + delta + " offset=" + newOffset
+                + " delta=" + delta + " extraDp=" + extraDp + " offset=" + newOffset
                 + " gestureNav=" + tw.nekomimi.nekogram.utils.AndroidUtil.isGestureNavigation(containerView.getContext()));
         if (newOffset == videoControlsGestureOffset) {
             return;

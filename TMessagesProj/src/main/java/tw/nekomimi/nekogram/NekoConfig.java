@@ -86,6 +86,8 @@ public class NekoConfig {
     public static ConfigItem ignoreBlocked = addConfig("IgnoreBlocked", configTypeBool, false);
     public static ConfigItem tabletMode = addConfig("TabletMode", configTypeInt, 0);
     public static ConfigItem tabletOptimizedMode = addConfig("TabletOptimizedMode", configTypeBool, false);
+    /** -1 = auto, otherwise extra dp added on top of the mandatory gesture inset for video controls. */
+    public static ConfigItem tabletVideoExtraBottomInset = addConfig("TabletVideoExtraBottomInset", configTypeInt, -1);
 
     public static ConfigItem typeface = addConfig("TypefaceUseDefault", configTypeBool, false);
     public static ConfigItem forceFontWeightFallback = addConfig("forceFontWeightFallback", configTypeBool, false);

@@ -30,6 +30,18 @@ public final class TabletModeManager {
         return isEnabled() && isTabletSplitLayout();
     }
 
+    /**
+     * Extra lift added on top of the mandatory gesture inset for the video control band.
+     * Returns -1 for "auto" (the built in 8dp), otherwise the configured amount in dp.
+     */
+    public static int getVideoControlsExtraInsetDp() {
+        try {
+            return NekoConfig.tabletVideoExtraBottomInset.Int();
+        } catch (Throwable ignore) {
+            return -1;
+        }
+    }
+
     /** Mirrors {@code LaunchActivity#isTabletSplitMode()}. */
     public static boolean isTabletSplitLayout() {
         if (!AndroidUtilities.isTabletInternal() || AndroidUtilities.isInMultiwindow) {
