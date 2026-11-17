@@ -321,6 +321,7 @@ import org.telegram.ui.Components.blur3.utils.Blur3Utils;
 import org.telegram.ui.Components.chat.ViewPositionWatcher;
 import org.telegram.ui.Components.spoilers.SpoilersTextView;
 import org.telegram.ui.Components.voip.AnimatedFileInfo;
+import org.telegram.ui.tablet.TabletModeManager;
 import org.telegram.ui.Stars.StarsController;
 import org.telegram.ui.Stories.DarkThemeResourceProvider;
 import org.telegram.ui.Stories.recorder.CaptionContainerView;
@@ -1124,6 +1125,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private long startedPlayTime;
     private boolean keepScreenOnFlagSet;
     private VideoPlayerControlFrameLayout videoPlayerControlFrameLayout;
+    /** Extra bottom margin that lifts the video control band out of the mandatory gesture strip. */
+    private int videoControlsGestureOffset;
     private String lastControlFrameDuration;
     private Animator videoPlayerControlAnimator;
     private boolean videoPlayerControlVisible = true;
@@ -4889,6 +4892,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                 navigationBar.setLayoutParams(navigationBarLayoutParams);
             }
             containerView.setPadding(r.left, 0, r.right, 0);
+            if (TabletModeManager.shouldApplyEnhancedMode()) {
+                updateVideoControlsGestureOffset(newInsetsCompat, bottom);
+            }
             if (actionBar != null) {
                 AndroidUtilities.cancelRunOnUIThread(updateContainerFlagsRunnable);
                 if (isVisible && animationInProgress == 0) {
@@ -9981,6 +9987,51 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         videoPreviewFrameAnimation.start();
     }
 
+    /**
+     * The container height already has {@code insets.bottom} subtracted (see PhotoViewerWindowView.onMeasure),
+     * so the control band only has to clear the part of the bottom edge that the visibility aware
+     * {@code systemBars()} value does not report: the mandatory gesture strip, which stays active while the
+     * navigation bar is hidden in immersive fullscreen. The offset is therefore a delta, never an absolute
+     * inset, so that it is exactly 0 on devices / orientations where there is nothing to clear.
+     */
+    private void updateVideoControlsGestureOffset(WindowInsetsCompat compat, int reportedBottom) {
+        final int gestureBottom;
+        try {
+            gestureBottom = Math.max(
+                    compat.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures()).bottom,
+                    compat.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom);
+        } catch (Throwable ignore) {
+            return;
+        }
+        final int delta = gestureBottom - reportedBottom;
+        final int newOffset = delta > 0 ? delta + dp(8) : 0;
+        if (newOffset == videoControlsGestureOffset) {
+            return;
+        }
+        videoControlsGestureOffset = newOffset;
+        applyVideoControlsGestureOffset();
+    }
+
+    private void applyVideoControlsGestureOffset() {
+        if (videoPlayerControlFrameLayout != null) {
+            ViewGroup.LayoutParams lp = videoPlayerControlFrameLayout.getLayoutParams();
+            if (lp instanceof ViewGroup.MarginLayoutParams
+                    && ((ViewGroup.MarginLayoutParams) lp).bottomMargin != videoControlsGestureOffset) {
+                ((ViewGroup.MarginLayoutParams) lp).bottomMargin = videoControlsGestureOffset;
+                videoPlayerControlFrameLayout.setLayoutParams(lp);
+            }
+        }
+        if (videoPreviewFrame != null) {
+            final int wanted = dp(48 + 10) + videoControlsGestureOffset;
+            ViewGroup.LayoutParams lp = videoPreviewFrame.getLayoutParams();
+            if (lp instanceof ViewGroup.MarginLayoutParams
+                    && ((ViewGroup.MarginLayoutParams) lp).bottomMargin != wanted) {
+                ((ViewGroup.MarginLayoutParams) lp).bottomMargin = wanted;
+                videoPreviewFrame.setLayoutParams(lp);
+            }
+        }
+    }
+
     private void createVideoControlsInterface() {
         videoPlayerControlFrameLayout = new VideoPlayerControlFrameLayout(containerView.getContext());
         containerView.addView(videoPlayerControlFrameLayout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 48, Gravity.BOTTOM | Gravity.LEFT));
@@ -10097,6 +10148,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
             parentActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         });
+        applyVideoControlsGestureOffset();
     }
 
     private int[] fixVideoWidthHeight(int w, int h) {
