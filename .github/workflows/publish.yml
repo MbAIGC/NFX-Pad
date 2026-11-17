@@ -1,0 +1,60 @@
+name: Publish APK release
+
+# Publishes an APK that has already been built - no compilation, no checkout of the
+# toolchain. Used to turn an existing "NFX-Pad build" artifact into a downloadable
+# release without rebuilding (~2 minutes instead of ~16).
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Run ID of a finished NFX-Pad build (empty = latest successful one)'
+        required: false
+      tag:
+        description: 'Release tag (empty = nfxp-pad-<short sha of that run>)'
+        required: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: Attach artifact to a release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve the build run
+        id: r
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          rid="${{ inputs.run_id }}"
+          if [ -z "$rid" ]; then
+            rid=$(gh run list -R "$GITHUB_REPOSITORY" -w "NFX-Pad build" -s success -L 1 \
+                    --json databaseId -q '.[0].databaseId')
+          fi
+          sha=$(gh run view "$rid" -R "$GITHUB_REPOSITORY" --json headSha -q .headSha | cut -c1-7)
+          echo "id=$rid"   >> "$GITHUB_OUTPUT"
+          echo "sha=$sha"  >> "$GITHUB_OUTPUT"
+          echo "publishing run $rid (commit $sha)"
+      - name: Download the built artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run download "${{ steps.r.outputs.id }}" -R "$GITHUB_REPOSITORY" -n NFX-Pad-normal-staging -D apks
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag }}"
+          [ -n "$tag" ] || tag="nfxp-pad-${{ steps.r.outputs.sha }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists, adding assets"
+          else
+            gh release create "$tag" --title "NFX-Pad $tag" --generate-notes --prerelease
+          fi
+          ls -l apks/*.apk
+          gh release upload "$tag" apks/*.apk --clobber
+          gh release view "$tag" --json url,assets -q '.url, (.assets[] | "  \(.name)  \(.size)")'
