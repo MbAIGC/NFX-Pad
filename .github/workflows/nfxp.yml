@@ -37,6 +37,15 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
+      - name: Verify the signing keystore
+        # Cheap preflight: a bad alias or password used to cost a full 40 minute build before failing
+        # in packageNormalStaging. The project key is used whenever no LOCAL_PROPERTIES secret exists.
+        run: |
+          if [ -n "${{ secrets.LOCAL_PROPERTIES }}" ]; then
+            echo "LOCAL_PROPERTIES is set, the build will use the supplied keystore credentials"
+          else
+            keytool -list -keystore TMessagesProj/nfxp.keystore -storepass nfxp-nfpad -alias nfxp
+          fi
       - name: Set up Ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:

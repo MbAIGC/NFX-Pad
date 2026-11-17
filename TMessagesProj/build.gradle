@@ -74,12 +74,16 @@ keystorePwd = keystorePwd ?: System.getenv('KEYSTORE_PASS')
 alias = alias ?: System.getenv('ALIAS_NAME')
 pwd = pwd ?: System.getenv('ALIAS_PASS')
 
-// Fallback for CI-only builds: gradle.properties already carries the credentials of the committed
-// release.keystore, so a fork can produce a signed, installable APK without configuring any
-// repository secret. LOCAL_PROPERTIES / environment variables still take precedence above.
-keystorePwd = keystorePwd ?: findProperty('RELEASE_STORE_PASSWORD')
-alias = alias ?: findProperty('RELEASE_KEY_ALIAS')
-pwd = pwd ?: findProperty('RELEASE_KEY_PASSWORD')
+// release.keystore belongs to the upstream project: its alias is 'chen_hai' and its password is not
+// published, so it cannot be used by a fork. When no credentials are supplied (LOCAL_PROPERTIES or the
+// environment), sign with the project key below instead, so CI can still produce an installable APK.
+def keystoreFileName = 'release.keystore'
+if (keystorePwd == null || alias == null || pwd == null) {
+    keystoreFileName = 'nfxp.keystore'
+    keystorePwd = 'nfxp-nfpad'
+    alias = 'nfxp'
+    pwd = 'nfxp-nfpad'
+}
 
 def nativeTarget = System.getenv('NATIVE_TARGET') ?: ''
 // Plugin package is arm-only: shadowhook doesn't support x86.
@@ -247,7 +251,7 @@ android {
 
     signingConfigs {
         release {
-            storeFile project.file('release.keystore')
+            storeFile project.file(keystoreFileName)
             storePassword keystorePwd
             keyAlias alias
             keyPassword pwd
