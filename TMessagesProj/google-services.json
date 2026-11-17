@@ -1,32 +1,13 @@
 {
   "project_info": {
-    "project_number": "446150425635",
-    "project_id": "project-7331853372972374607",
-    "storage_bucket": "project-7331853372972374607.firebasestorage.app"
+    "project_number": "1050961385808",
+    "project_id": "nfxp-50d00",
+    "storage_bucket": "nfxp-50d00.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:446150425635:android:88638546dd888934298596",
-        "android_client_info": {
-          "package_name": "fork.risin42.nagramx"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAnHQcCSoIyCasmAbEbUrK5fys1SScP0DQ"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:446150425635:android:6e66787000000000000001",
+        "mobilesdk_app_id": "1:1050961385808:android:3fa6e35214136adbc33455",
         "android_client_info": {
           "package_name": "fork.risin42.nagramx.nfxp"
         }
@@ -34,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAnHQcCSoIyCasmAbEbUrK5fys1SScP0DQ"
+          "current_key": "AIzaSyBLPZ8ZJLztEmPhvXWXsC70lLp5sk2BQGA"
         }
       ],
       "services": {
