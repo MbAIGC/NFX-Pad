@@ -9752,9 +9752,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 layout == rightActionBarLayout && (rightActionBarLayout.getFragmentStack().size() > 1 || !(rightActionBarLayout.getLastFragment() instanceof ChatActivity))
             ) {
                 if (!tabletFullSize && layout == rightActionBarLayout || tabletFullSize && layout == actionBarLayout) {
-                    TabletDebugLog.d("route", "keep stack: presenting " + fragment.getClass().getSimpleName()
-                            + " into layout=" + (layout == actionBarLayout ? "main" : "right")
-                            + " stackSize=" + layout.getFragmentStack().size());
+                    // only chats matter here: any other fragment type would just add noise to the export
+                    if (fragment instanceof ChatActivity) {
+                        TabletDebugLog.d("route", "keep stack: presenting " + fragment.getClass().getSimpleName()
+                                + " into layout=" + (layout == actionBarLayout ? "main" : "right")
+                                + " stackSize=" + layout.getFragmentStack().size());
+                    }
                     if (layout == rightActionBarLayout) {
                         if (rightActionBarLayout.getView() != null) {
                             rightActionBarLayout.getView().setVisibility(View.VISIBLE);

@@ -14804,6 +14804,18 @@ public class ChatActivity extends BaseFragment implements
         updateSearchCountText();
     }
 
+    /**
+     * Only record visibility transitions that have something to do with a search session. Every chat that
+     * is opened would otherwise add two lines, and the exported file would be unreadable.
+     */
+    private boolean isSearchDiagnosticsRelevant() {
+        return searching
+                || searchingHashtag != null
+                || searchListRestorePending
+                || hashtagSearchRestorePending
+                || messagesSearchListContainer != null && isMessagesSearchListVisible();
+    }
+
     /** Adapter position of the given message in the results overlay, or -1 when it is not there anymore. */
     private int findSearchResultPositionById(int messageId) {
         if (messagesSearchAdapter == null || messageId == 0) {
@@ -30043,12 +30055,14 @@ public class ChatActivity extends BaseFragment implements
     public void onBecomeFullyVisible() {
         isFullyVisible = true;
         super.onBecomeFullyVisible();
-        TabletDebugLog.d("chat", "fullyVisible searching=" + searching
-                + " query=" + TabletDebugLog.redact(searchingQuery)
-                + " hashtag=" + TabletDebugLog.redact(searchingHashtag)
-                + " listVisible=" + isMessagesSearchListVisible()
-                + " restorePending=" + searchListRestorePending
-                + " hashtagPending=" + hashtagSearchRestorePending);
+        if (isSearchDiagnosticsRelevant()) {
+            TabletDebugLog.d("chat", "fullyVisible searching=" + searching
+                    + " query=" + TabletDebugLog.redact(searchingQuery)
+                    + " hashtag=" + TabletDebugLog.redact(searchingHashtag)
+                    + " listVisible=" + isMessagesSearchListVisible()
+                    + " restorePending=" + searchListRestorePending
+                    + " hashtagPending=" + hashtagSearchRestorePending);
+        }
         if (searchListRestorePending) {
             searchListRestorePending = false;
             final int position = searchListRestorePosition;
@@ -30212,10 +30226,12 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onBecomeFullyHidden() {
-        TabletDebugLog.d("chat", "fullyHidden searching=" + searching
-                + " query=" + TabletDebugLog.redact(searchingQuery)
-                + " hashtag=" + TabletDebugLog.redact(searchingHashtag)
-                + " listVisible=" + isMessagesSearchListVisible());
+        if (isSearchDiagnosticsRelevant()) {
+            TabletDebugLog.d("chat", "fullyHidden searching=" + searching
+                    + " query=" + TabletDebugLog.redact(searchingQuery)
+                    + " hashtag=" + TabletDebugLog.redact(searchingHashtag)
+                    + " listVisible=" + isMessagesSearchListVisible());
+        }
         saveHashtagSearchSnapshotIfNeeded();
         hideTagSelector();
         if (!getMessagesController().premiumFeaturesBlocked() && getMessagesController().transcribeAudioTrialWeeklyNumber <= 0 && !getMessagesController().didPressTranscribeButtonEnough() && !getUserConfig().isPremium() && messages != null) {

@@ -315,4 +315,5 @@
     <string name="TabletOptimizedMode">Enhanced Tablet Mode</string>
     <string name="TabletOptimizedModeInfo">Improves return navigation, restores your search results after viewing comments, and keeps fullscreen video controls clear of the system gesture bar.</string>
     <string name="TabletVideoExtraBottomInset">Video controls bottom inset</string>
+    <string name="ExportTabletDiagnostics">Export tablet diagnostics</string>
 </resources>

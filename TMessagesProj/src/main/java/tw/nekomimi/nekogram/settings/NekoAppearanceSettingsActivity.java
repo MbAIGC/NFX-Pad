@@ -43,6 +43,7 @@ import tw.nekomimi.nekogram.config.cell.ConfigCellHeader;
 import tw.nekomimi.nekogram.config.cell.ConfigCellSelectBox;
 import tw.nekomimi.nekogram.config.cell.ConfigCellTextCheck;
 import tw.nekomimi.nekogram.config.cell.ConfigCellTextCheckIcon;
+import tw.nekomimi.nekogram.config.cell.ConfigCellText;
 import tw.nekomimi.nekogram.config.cell.ConfigCellTextInput;
 import tw.nekomimi.nekogram.ui.cells.AvatarCornersPreviewCell;
 import tw.nekomimi.nekogram.ui.cells.ChatListPreviewCell;
@@ -119,6 +120,17 @@ public class NekoAppearanceSettingsActivity extends BaseNekoXSettingsActivity {
             "+24 dp",
             "+32 dp"
     }, null));
+    private final AbstractConfigCell exportDiagnosticsRow = cellGroup.appendCell(new ConfigCellText(
+            "ExportTabletDiagnostics",
+            () -> {
+                android.app.Activity activity = getParentActivity();
+                if (activity == null) {
+                    return;
+                }
+                if (!org.telegram.ui.tablet.TabletDebugLog.share(activity)) {
+                    android.widget.Toast.makeText(activity, "No diagnostics recorded yet", android.widget.Toast.LENGTH_SHORT).show();
+                }
+            }));
     private final AbstractConfigCell dividerAppearance = cellGroup.appendCell(new ConfigCellDivider());
     private final AbstractConfigCell avatarCornersPreviewRow = cellGroup.appendCell(new ConfigCellCustom("AvatarCorners", ConfigCellCustom.CUSTOM_ITEM_AvatarCorners, false));
     private final AbstractConfigCell singleCornerRadiusRow = cellGroup.appendCell(

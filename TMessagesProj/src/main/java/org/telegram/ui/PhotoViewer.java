@@ -1129,6 +1129,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     private VideoPlayerControlFrameLayout videoPlayerControlFrameLayout;
     /** Extra bottom margin that lifts the video control band out of the mandatory gesture strip. */
     private int videoControlsGestureOffset;
+    private boolean videoControlsGestureLogged;
     private String lastControlFrameDuration;
     private Animator videoPlayerControlAnimator;
     private boolean videoPlayerControlVisible = true;
@@ -9889,6 +9890,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void onShowView() {
+        videoControlsGestureLogged = false;
         if (parentActivity instanceof LaunchActivity) {
             LaunchActivity launchActivity = (LaunchActivity) parentActivity;
             launchActivity.addOnUserLeaveHintListener(onUserLeaveHintListener);
@@ -10009,15 +10011,18 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         final int extraDp = TabletModeManager.getVideoControlsExtraInsetDp();
         final int extra = dp(extraDp >= 0 ? extraDp : 8);
         final int newOffset = delta > 0 ? delta + extra : 0;
+        final boolean changed = newOffset != videoControlsGestureOffset;
+        if (!changed && videoControlsGestureLogged) {
+            return;
+        }
+        videoControlsGestureLogged = true;
         TabletDebugLog.d("media", "insets reportedBottom=" + reportedBottom
                 + " mandatory=" + compat.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures()).bottom
                 + " systemGestures=" + compat.getInsets(WindowInsetsCompat.Type.systemGestures()).bottom
                 + " navBars=" + compat.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
                 + " delta=" + delta + " extraDp=" + extraDp + " offset=" + newOffset
+                + " changed=" + changed
                 + " gestureNav=" + tw.nekomimi.nekogram.utils.AndroidUtil.isGestureNavigation(containerView.getContext()));
-        if (newOffset == videoControlsGestureOffset) {
-            return;
-        }
         videoControlsGestureOffset = newOffset;
         applyVideoControlsGestureOffset();
     }
