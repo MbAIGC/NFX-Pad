@@ -1862,29 +1862,42 @@ public class ActionBarLayout extends FrameLayout implements INavigationLayout, F
 
     @Override
     public void onBackPressed() {
+        if (onBackPressedInternal() && !fragmentsStack.isEmpty()) {
+            closeLastFragment(true);
+        }
+    }
+
+    /**
+     * Runs the same pre-checks as {@link #onBackPressed()} and asks the current fragment whether it wants to
+     * be closed, but leaves the actual close to the caller.
+     *
+     * <p>The tablet right pane uses this instead of re-implementing the flow: it keeps closing through
+     * {@link BaseFragment#finishFragment()} (which also dismisses a parent dialog and routes through the
+     * preview delegate), while the {@code startedTracking} and transition guards, the group call pip, the
+     * header search field and the simple action bar are all honoured, exactly like the main pane.
+     *
+     * @return true when the caller should close the last fragment itself
+     */
+    public boolean onBackPressedInternal() {
         if (transitionAnimationPreviewMode || startedTracking || checkTransitionAnimation() || fragmentsStack.isEmpty()) {
-            return;
+            return false;
         }
         if (GroupCallPip.onBackPressed()) {
-            return;
+            return false;
         }
         if (!storyViewerAttached() && currentActionBar != null && !currentActionBar.isActionModeShowed() && currentActionBar.isSearchFieldVisible) {
             currentActionBar.closeSearchField();
-            return;
+            return false;
         }
         final BaseFragment lastFragmentForBar = fragmentsStack.get(fragmentsStack.size() - 1);
         if (!storyViewerAttached() && lastFragmentForBar.simpleActionBar != null && lastFragmentForBar.simpleActionBar.onBackPressed()) {
-            return;
+            return false;
         }
         if (sheetFragment != null && !sheetFragment.onBackPressed(true)) {
-            return;
+            return false;
         }
         BaseFragment lastFragment = fragmentsStack.get(fragmentsStack.size() - 1);
-        if (lastFragment.onBackPressed(true)) {
-            if (!fragmentsStack.isEmpty()) {
-                closeLastFragment(true);
-            }
-        }
+        return lastFragment.onBackPressed(true);
     }
 
     @Override

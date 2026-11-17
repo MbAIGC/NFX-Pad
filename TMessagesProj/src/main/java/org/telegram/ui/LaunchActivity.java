@@ -9453,8 +9453,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 layersActionBarLayout.onBackPressed();
             } else {
                 if (rightActionBarLayout != null && rightActionBarLayout.getView().getVisibility() == View.VISIBLE && !rightActionBarLayout.getFragmentStack().isEmpty()) {
-                    BaseFragment lastFragment = rightActionBarLayout.getFragmentStack().get(rightActionBarLayout.getFragmentStack().size() - 1);
-                    if (lastFragment.onBackPressed(true)) {
+                    // same pre-checks as the main pane (transition / swipe in progress, group call pip,
+                    // header search field, simple action bar, sheets); the close itself stays here so that
+                    // BaseFragment#finishFragment() keeps handling the parent dialog / preview delegate
+                    if (rightActionBarLayout.onBackPressedInternal()) {
+                        BaseFragment lastFragment = rightActionBarLayout.getFragmentStack().get(rightActionBarLayout.getFragmentStack().size() - 1);
                         lastFragment.finishFragment();
                     }
                 } else {
