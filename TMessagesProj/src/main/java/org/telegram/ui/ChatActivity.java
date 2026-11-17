@@ -365,6 +365,7 @@ import org.telegram.ui.Stories.recorder.PreviewView;
 import org.telegram.ui.Stories.recorder.StoryEntry;
 import org.telegram.ui.Stories.recorder.StoryRecorder;
 import org.telegram.ui.TON.TONIntroActivity;
+import org.telegram.ui.tablet.TabletModeManager;
 import org.telegram.ui.bots.BotAdView;
 import org.telegram.ui.bots.BotCommandsMenuContainer;
 import org.telegram.ui.bots.BotCommandsMenuView;
@@ -863,6 +864,13 @@ public class ChatActivity extends BaseFragment implements
     private ChatActivitySearchContainer messagesSearchListContainer;
     public RecyclerListView messagesSearchListView;
     private MessagesSearchAdapter messagesSearchAdapter;
+    /**
+     * Enhanced Tablet Mode: the results overlay is deliberately hidden when a result is picked (so the
+     * message is shown in context), but nothing used to bring it back when the page pushed on top of it
+     * was closed. These two fields hold that one-shot restore request.
+     */
+    private boolean searchListRestorePending;
+    private int searchListRestorePosition = -1;
     private ChatActivityMessageMetricsView messageMetricsView;
 
     public static final int MODE_DEFAULT = 0;
@@ -8537,6 +8545,10 @@ public class ChatActivity extends BaseFragment implements
                 });
             } else {
                 getMediaDataController().jumpToSearchedMessage(classGuid, position);
+                if (TabletModeManager.shouldApplyEnhancedMode()) {
+                    searchListRestorePosition = position;
+                    searchListRestorePending = true;
+                }
                 showMessagesSearchListView(false);
             }
         });
@@ -29935,6 +29947,18 @@ public class ChatActivity extends BaseFragment implements
     public void onBecomeFullyVisible() {
         isFullyVisible = true;
         super.onBecomeFullyVisible();
+        if (searchListRestorePending) {
+            searchListRestorePending = false;
+            final int position = searchListRestorePosition;
+            searchListRestorePosition = -1;
+            if (searching && messagesSearchListView != null && messagesSearchListView.getLayoutManager() != null) {
+                if (position >= 0) {
+                    messagesSearchListView.getLayoutManager().scrollToPosition(position);
+                }
+                // the search session is still alive, so this only re-shows the cached results: no new request
+                showMessagesSearchListView(true);
+            }
+        }
         if (showCloseChatDialogLater) {
             showDialog(closeChatDialog);
         }
@@ -42516,6 +42540,8 @@ public class ChatActivity extends BaseFragment implements
         @Override
         public void onSearchCollapse() {
             searching = false;
+            searchListRestorePending = false;
+            searchListRestorePosition = -1;
             updatePagedownButtonVisibility(true);
             updateSearchUpDownButtonVisibility(true);
             if (searchCalendarButton != null) {
