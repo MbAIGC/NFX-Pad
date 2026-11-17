@@ -30044,8 +30044,8 @@ public class ChatActivity extends BaseFragment implements
         isFullyVisible = true;
         super.onBecomeFullyVisible();
         TabletDebugLog.d("chat", "fullyVisible searching=" + searching
-                + " query=" + searchingQuery
-                + " hashtag=" + searchingHashtag
+                + " query=" + TabletDebugLog.redact(searchingQuery)
+                + " hashtag=" + TabletDebugLog.redact(searchingHashtag)
                 + " listVisible=" + isMessagesSearchListVisible()
                 + " restorePending=" + searchListRestorePending
                 + " hashtagPending=" + hashtagSearchRestorePending);
@@ -30213,8 +30213,8 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onBecomeFullyHidden() {
         TabletDebugLog.d("chat", "fullyHidden searching=" + searching
-                + " query=" + searchingQuery
-                + " hashtag=" + searchingHashtag
+                + " query=" + TabletDebugLog.redact(searchingQuery)
+                + " hashtag=" + TabletDebugLog.redact(searchingHashtag)
                 + " listVisible=" + isMessagesSearchListVisible());
         saveHashtagSearchSnapshotIfNeeded();
         hideTagSelector();
