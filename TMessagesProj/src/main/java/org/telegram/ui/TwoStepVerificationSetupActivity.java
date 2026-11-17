@@ -2118,8 +2118,14 @@ public class TwoStepVerificationSetupActivity extends BaseFragment {
             if (invoked) showSetForcePasswordAlert();
             return false;
         }
-        if (invoked) finishFragment(); // ???
-        return true;
+        if (invoked) {
+            // close here, because the finishFragment() override above has to run its bookkeeping for the
+            // sibling screens, and report the event as consumed: both callers (ActionBarLayout and the
+            // tablet right pane) close the last fragment themselves when this returns true, which used to
+            // remove a second page for one back press
+            finishFragment();
+        }
+        return false;
     }
 
     @Override
