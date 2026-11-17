@@ -839,6 +839,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             locked = false;
                         }
 
+                        if (backGestureLayout != null) {
+                            final ActionBarLayout layout = backGestureLayout;
+                            backGestureLayout = null;
+                            layout.onBackInvoked();
+                            return;
+                        }
                         if (AndroidUtilities.isTablet()) {
                             onBackPressed();
                             return;
@@ -857,14 +863,16 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         started = true;
                         invoked = false;
                         predictiveBackStarted = false;
+                        backGestureLayout = null;
                     }
 
                     private void onBackStartedInternal(BackEvent backEvent) {
-                        if (AndroidUtilities.isTablet()) return;
                         if (!onBackPressed(false)) return;
-                        if (actionBarLayout != null) {
-                            boolean started = actionBarLayout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY());
-                            if (started && !locked) {
+                        final ActionBarLayout layout = getBackGestureLayout();
+                        if (layout == null) return;
+                        if (layout.onBackStarted(backEvent.getTouchX(), backEvent.getTouchY())) {
+                            backGestureLayout = layout;
+                            if (!locked) {
                                 locker.lock();
                                 locked = true;
                             }
@@ -887,9 +895,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
                         final float fixedProgress = Math.max(0, progress - LAZY_START) / (1 - LAZY_START);
 
-                        if (AndroidUtilities.isTablet()) return;
-                        if (actionBarLayout != null) {
-                            actionBarLayout.onBackProgress(fixedProgress);
+                        if (backGestureLayout != null) {
+                            backGestureLayout.onBackProgress(fixedProgress);
                         }
                     }
 
@@ -902,9 +909,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             locked = false;
                         }
 
-                        if (AndroidUtilities.isTablet()) return;
-                        if (actionBarLayout != null) {
-                            actionBarLayout.onBackCancelled();
+                        if (backGestureLayout != null) {
+                            backGestureLayout.onBackCancelled();
+                            backGestureLayout = null;
                         }
                     }
                 };
@@ -958,6 +965,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     private Object onBackAnimationCallback;
+    /**
+     * The pane that actually started a predictive back gesture, or null. Phones had this wired to the main
+     * layout only; the tablet panes are resolved per gesture so the right pane can slide as well.
+     */
+    private ActionBarLayout backGestureLayout;
     private Object onBackInvokedCallback;
 
     public static void showAttachMenuBot(LaunchActivity launchActivity, int currentAccount, TLRPC.TL_attachMenuBot attachMenuBot, String startApp, boolean sidemenu) {
@@ -2058,6 +2070,26 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             .add(NotificationCenter.currentUserPremiumStatusChanged)
             .add(NotificationCenter.chatSwitchedForum)
             .add(NotificationCenter.guardBotDecisionResult);
+    }
+
+    /**
+     * The pane that should own the predictive back gesture, or null when the gesture should not animate and
+     * the plain {@link #onBackPressed()} path is used instead. Mirrors the branch order of onBackPressed():
+     * overlays first, then the right pane, then the main stack.
+     */
+    private ActionBarLayout getBackGestureLayout() {
+        if (AndroidUtilities.isTablet()) {
+            if (layersActionBarLayout != null && layersActionBarLayout.getView().getVisibility() == View.VISIBLE
+                    && !layersActionBarLayout.getFragmentStack().isEmpty()) {
+                // the overlay pane animates with alpha, not with a slide: keep it on the non predictive path
+                return null;
+            }
+            if (rightActionBarLayout != null && rightActionBarLayout.getView().getVisibility() == View.VISIBLE
+                    && !rightActionBarLayout.getFragmentStack().isEmpty()) {
+                return rightActionBarLayout;
+            }
+        }
+        return actionBarLayout;
     }
 
     private boolean isTabletSplitMode() {
