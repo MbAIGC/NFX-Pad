@@ -74,6 +74,13 @@ keystorePwd = keystorePwd ?: System.getenv('KEYSTORE_PASS')
 alias = alias ?: System.getenv('ALIAS_NAME')
 pwd = pwd ?: System.getenv('ALIAS_PASS')
 
+// Fallback for CI-only builds: gradle.properties already carries the credentials of the committed
+// release.keystore, so a fork can produce a signed, installable APK without configuring any
+// repository secret. LOCAL_PROPERTIES / environment variables still take precedence above.
+keystorePwd = keystorePwd ?: findProperty('RELEASE_STORE_PASSWORD')
+alias = alias ?: findProperty('RELEASE_KEY_ALIAS')
+pwd = pwd ?: findProperty('RELEASE_KEY_PASSWORD')
+
 def nativeTarget = System.getenv('NATIVE_TARGET') ?: ''
 // Plugin package is arm-only: shadowhook doesn't support x86.
 def pluginAbis = ['armeabi-v7a', 'arm64-v8a']
