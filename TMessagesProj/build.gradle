@@ -197,13 +197,16 @@ android {
         versionCode verCode
 
         // obtain your own keys at https://core.telegram.org/api/obtaining_api_id
+        // the fallback is the public Telegram Android id, which the server labels "Telegram Android" in the
+        // active sessions list: only your own api id makes the app show up under its own name there
         def appId = '6'
         def appHash = 'eb06d4abfb49dc3eeb1aeb98ae0f581e'
-
         if (properties != null) {
-            appId = properties.getProperty('TELEGRAM_APP_ID') ?: System.getenv('TELEGRAM_APP_ID') ?: appId
-            appHash = properties.getProperty('TELEGRAM_APP_HASH') ?: System.getenv('TELEGRAM_APP_HASH') ?: appHash
+            appId = properties.getProperty('TELEGRAM_APP_ID') ?: appId
+            appHash = properties.getProperty('TELEGRAM_APP_HASH') ?: appHash
         }
+        appId = System.getenv('TELEGRAM_APP_ID') ?: appId
+        appHash = System.getenv('TELEGRAM_APP_HASH') ?: appHash
 
         buildConfigField 'String', 'BUILD_VERSION_STRING', '"' + verName + '"'
         buildConfigField 'String', 'OFFICIAL_VERSION', '"' + officialVer + '"'

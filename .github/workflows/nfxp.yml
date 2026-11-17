@@ -94,6 +94,10 @@ jobs:
       - name: Assemble normal staging
         env:
           COMMIT_ID: ${{ github.event.head_commit.id }}
+          # optional: your own api id / hash from my.telegram.org. Without them the build falls back to the
+          # public Telegram Android id, and active sessions show the app as "Telegram Android".
+          TELEGRAM_APP_ID: ${{ secrets.TELEGRAM_APP_ID }}
+          TELEGRAM_APP_HASH: ${{ secrets.TELEGRAM_APP_HASH }}
         run: |
           export LOCAL_PROPERTIES="${{ secrets.LOCAL_PROPERTIES }}"
           export BUILD_TIMESTAMP=$(date +%s)
