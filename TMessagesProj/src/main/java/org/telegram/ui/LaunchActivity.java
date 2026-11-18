@@ -9777,6 +9777,19 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                     return result;
                 } else if (!tabletFullSize && layout != rightActionBarLayout && rightActionBarLayout != null) {
+                    // Opening a page from inside a chat (comments, profile, forwarded message, ...) used to
+                    // destroy whatever was open on the right, so the chat the user came from was gone and a
+                    // single back press emptied the pane. Push on top of it instead.
+                    if (layout.getLastFragment() instanceof ChatActivity && !rightActionBarLayout.getFragmentStack().isEmpty()) {
+                        TabletDebugLog.d("route", "push onto right pane: presenting " + fragment.getClass().getSimpleName()
+                                + " from chat, rightStack=" + rightActionBarLayout.getFragmentStack().size());
+                        if (rightActionBarLayout.getView() != null) {
+                            rightActionBarLayout.getView().setVisibility(View.VISIBLE);
+                        }
+                        backgroundTablet.setVisibility(View.GONE);
+                        rightActionBarLayout.presentFragment(params.setNoAnimation(forceWithoutAnimation).setRemoveLast(removeLast).setCheckPresentFromDelegate(false));
+                        return false;
+                    }
                     TabletDebugLog.d("route", "WIPE right pane: presenting " + fragment.getClass().getSimpleName()
                             + " from layout=" + (layout == actionBarLayout ? "main" : layout == layersActionBarLayout ? "layers" : "other")
                             + " rightStack=" + rightActionBarLayout.getFragmentStack().size());

@@ -10007,10 +10007,22 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         } catch (Throwable ignore) {
             return;
         }
-        final int delta = gestureBottom - reportedBottom;
+        final int delta = Math.max(0, gestureBottom - reportedBottom);
         final int extraDp = TabletModeManager.getVideoControlsExtraInsetDp();
-        final int extra = dp(extraDp >= 0 ? extraDp : 8);
-        final int newOffset = delta > 0 ? delta + extra : 0;
+        final boolean gestureNav = tw.nekomimi.nekogram.utils.AndroidUtil.isGestureNavigation(containerView.getContext());
+        // Some devices (seen: OnePlus on Android 16) report 0 for mandatorySystemGestures and
+        // systemGestures even though the gesture strip is clearly active, so "auto" cannot depend on the
+        // inset alone. A configured value always applies; auto falls back to a fixed lift when gestures are
+        // on, and stays 0 otherwise so nothing changes where there is nothing to clear.
+        final int extra = dp(extraDp >= 0 ? extraDp : (gestureNav ? 24 : 8));
+        final int newOffset;
+        if (delta > 0) {
+            newOffset = delta + extra;
+        } else if (extraDp >= 0 || gestureNav) {
+            newOffset = extra;
+        } else {
+            newOffset = 0;
+        }
         final boolean changed = newOffset != videoControlsGestureOffset;
         if (!changed && videoControlsGestureLogged) {
             return;
