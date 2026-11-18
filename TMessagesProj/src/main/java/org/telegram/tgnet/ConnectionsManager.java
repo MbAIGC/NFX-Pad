@@ -231,6 +231,16 @@ public class ConnectionsManager extends BaseController {
         return localInstance;
     }
 
+    /**
+     * Name reported to Telegram as the device name (device_model in initConnection). It is what the active
+     * sessions list shows as the first line of the session, and it is the only one of those strings that can
+     * be chosen freely: the application name next to it comes from the server record of the api id.
+     *
+     * Note that two installs of this build will look identical in the session list, so the hardware model is
+     * no longer distinguishable there; the diagnostics header still records it locally.
+     */
+    public static final String DEVICE_MODEL_NAME = "NagramXF Android";
+
     public ConnectionsManager(int instance) {
         super(instance);
         connectionState = native_getConnectionState(currentAccount);
@@ -249,7 +259,7 @@ public class ConnectionsManager extends BaseController {
         try {
             systemLangCode = LocaleController.getSystemLocaleStringIso639().toLowerCase();
             langCode = LocaleController.getLocaleStringIso639().toLowerCase();
-            deviceModel = Build.MANUFACTURER + Build.MODEL;
+            deviceModel = DEVICE_MODEL_NAME;
             //PackageInfo pInfo = ApplicationLoader.applicationContext.getPackageManager().getPackageInfo(ApplicationLoader.applicationContext.getPackageName(), 0);
             appVersion = BuildConfig.VERSION_NAME.split("-")[0];
             /*if (BuildVars.DEBUG_PRIVATE_VERSION) {
