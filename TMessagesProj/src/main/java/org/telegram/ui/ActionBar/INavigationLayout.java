@@ -345,6 +345,15 @@ public interface INavigationLayout {
         public boolean needDelayWithoutAnimation;
         public boolean forceRightLayout;
 
+        /**
+         * True when a fragment initiated this presentation (dialog list, contacts, a chat opening another
+         * chat) rather than the hosting activity itself (links, intents, notifications). The tablet right
+         * pane replaces its content only for the former, so that back still returns to the chat the user
+         * came from when a link opened a new one.
+         */
+        public boolean fromFragment;
+        public boolean presenterIsChat;
+
         public boolean isFromDelay;
         public boolean delayDone;
 
@@ -354,6 +363,12 @@ public interface INavigationLayout {
 
         public NavigationParams forceRightLayout() {
             forceRightLayout = true;
+            return this;
+        }
+
+        public NavigationParams setFromFragment(BaseFragment presenter) {
+            fromFragment = presenter != null;
+            presenterIsChat = presenter instanceof org.telegram.ui.ChatActivity;
             return this;
         }
 

@@ -810,18 +810,23 @@ public abstract class BaseFragment {
     }
 
     public boolean presentFragment(BaseFragment fragment) {
-        return allowPresentFragment() && parentLayout != null && parentLayout.presentFragment(fragment);
+        return presentFragment(new INavigationLayout.NavigationParams(fragment));
     }
 
     public boolean presentFragment(BaseFragment fragment, boolean removeLast) {
-        return allowPresentFragment() && parentLayout != null && parentLayout.presentFragment(fragment, removeLast);
+        return presentFragment(new INavigationLayout.NavigationParams(fragment).setRemoveLast(removeLast));
     }
 
     public boolean presentFragment(BaseFragment fragment, boolean removeLast, boolean forceWithoutAnimation) {
-        return allowPresentFragment() && parentLayout != null && parentLayout.presentFragment(fragment, removeLast, forceWithoutAnimation, true, false, null);
+        return presentFragment(new INavigationLayout.NavigationParams(fragment)
+                .setRemoveLast(removeLast)
+                .setNoAnimation(forceWithoutAnimation));
     }
 
     public boolean presentFragment(INavigationLayout.NavigationParams params) {
+        // remember who is asking: a fragment asking (dialog list) replaces the right pane, the activity
+        // asking (message link, notification) pushes on top of it
+        params.setFromFragment(this);
         return allowPresentFragment() && parentLayout != null && parentLayout.presentFragment(params);
     }
 
