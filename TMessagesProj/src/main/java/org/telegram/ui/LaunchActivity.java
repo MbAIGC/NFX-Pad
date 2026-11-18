@@ -7753,6 +7753,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onPause() {
+        TabletDebugLog.d("life", "activity pause " + panesState());
         super.onPause();
         isResumed = false;
         WidgetMedia.onAppPaused(true);
@@ -8070,8 +8071,28 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     View feedbackView;
 
     @Override
+    /** Snapshot of what the shell is actually showing, for the resume / pause diagnostics. */
+    private String panesState() {
+        final StringBuilder b = new StringBuilder();
+        b.append("mainStack=").append(actionBarLayout == null ? -1 : actionBarLayout.getFragmentStack().size());
+        if (actionBarLayout != null && actionBarLayout.getView() != null) {
+            b.append(" mainVis=").append(actionBarLayout.getView().getVisibility())
+             .append(" mainChildren=").append(actionBarLayout.getView().getChildCount());
+        }
+        b.append(" rightStack=").append(rightActionBarLayout == null ? -1 : rightActionBarLayout.getFragmentStack().size());
+        if (rightActionBarLayout != null && rightActionBarLayout.getView() != null) {
+            b.append(" rightVis=").append(rightActionBarLayout.getView().getVisibility())
+             .append(" rightChildren=").append(rightActionBarLayout.getView().getChildCount())
+             .append(" rightTop=").append(rightActionBarLayout.getFragmentStack().isEmpty() ? "none"
+                    : rightActionBarLayout.getFragmentStack().get(rightActionBarLayout.getFragmentStack().size() - 1).getClass().getSimpleName());
+        }
+        b.append(" layersStack=").append(layersActionBarLayout == null ? -1 : layersActionBarLayout.getFragmentStack().size());
+        return b.toString();
+    }
+
     protected void onResume() {
         super.onResume();
+        TabletDebugLog.d("life", "activity resume " + panesState());
         WidgetMedia.onAppPaused(false);
         isResumed = true;
         PipCoordinator.getInstance().onActivityResume(this);

@@ -33058,6 +33058,10 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onResume() {
         super.onResume();
+        TabletDebugLog.d("life", "chat resume viewAttached="
+                + (fragmentView != null && fragmentView.getParent() != null)
+                + " viewNull=" + (fragmentView == null)
+                + " fullyVisible=" + isFullyVisible);
         cachedIsGestureNavigation = AndroidUtil.isGestureNavigation(getContext());
         checkShowBlur(false);
         activityResumeTime = System.currentTimeMillis();

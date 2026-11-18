@@ -59,6 +59,7 @@ public final class TabletDebugLog {
     public static final boolean AREA_ABL = true;
     public static final boolean AREA_CHAT = true;
     public static final boolean AREA_MEDIA = true;
+    public static final boolean AREA_LIFE = true;
 
     private static final SimpleDateFormat TIME = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
     private static boolean headerWritten;
@@ -105,6 +106,7 @@ public final class TabletDebugLog {
             case "abl" -> AREA_ABL;
             case "chat" -> AREA_CHAT;
             case "media" -> AREA_MEDIA;
+            case "life" -> AREA_LIFE;
             default -> false;
         };
     }
