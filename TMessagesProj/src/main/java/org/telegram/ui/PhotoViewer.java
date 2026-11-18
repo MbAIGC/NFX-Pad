@@ -10020,13 +10020,14 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         // systemGestures even though the gesture strip is clearly active, so "auto" cannot depend on the
         // inset alone. A configured value always applies; auto falls back to a fixed lift when gestures are
         // on, and stays 0 otherwise so nothing changes where there is nothing to clear.
-        // measured on a OnePlus that reports 0 for both gesture insets: 16dp and 24dp were still inside the
-        // strip, 32dp clears it. On devices that do report 24dp the delta + 8dp path lands on the same 32dp.
-        final int extra = dp(extraDp >= 0 ? extraDp : (gestureNav ? 32 : 8));
+        // measured on a OnePlus that reports 0 for both gesture insets: 8dp is already enough, so the
+        // automatic lift stays small; the setting is there for devices that need more
+        final int extra = dp(extraDp >= 0 ? extraDp : 8);
         final int newOffset;
         if (delta > 0) {
             newOffset = delta + extra;
         } else if (extraDp >= 0 || gestureNav) {
+            // the inset reads 0 but gestures are on, so the plain extra still has to be applied
             newOffset = extra;
         } else {
             newOffset = 0;

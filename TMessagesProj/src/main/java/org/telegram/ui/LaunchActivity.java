@@ -9777,12 +9777,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                     return result;
                 } else if (!tabletFullSize && layout != rightActionBarLayout && rightActionBarLayout != null) {
-                    // Opening a page from inside a chat (comments, profile, forwarded message, ...) used to
-                    // destroy whatever was open on the right, so the chat the user came from was gone and a
-                    // single back press emptied the pane. Push on top of it instead.
-                    if (layout.getLastFragment() instanceof ChatActivity && !rightActionBarLayout.getFragmentStack().isEmpty()) {
+                    // Opening a chat used to destroy whatever was open on the right. That happened for in-app
+                    // links too (a message link to another channel is presented from the main pane, whose top
+                    // fragment is the tab host, not a chat), so the channel the user came from was gone and a
+                    // single back press emptied the pane. Push on top of the open chats instead.
+                    if (fragment instanceof ChatActivity && !rightActionBarLayout.getFragmentStack().isEmpty()) {
                         TabletDebugLog.d("route", "push onto right pane: presenting " + fragment.getClass().getSimpleName()
-                                + " from chat, rightStack=" + rightActionBarLayout.getFragmentStack().size());
+                                + " from " + (layout.getLastFragment() == null ? "?" : layout.getLastFragment().getClass().getSimpleName())
+                                + ", rightStack=" + rightActionBarLayout.getFragmentStack().size());
                         if (rightActionBarLayout.getView() != null) {
                             rightActionBarLayout.getView().setVisibility(View.VISIBLE);
                         }
