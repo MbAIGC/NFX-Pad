@@ -58,7 +58,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="${{ inputs.tag }}"
-          [ -n "$tag" ] || tag="nfxp-pad-${{ steps.r.outputs.sha }}"
+          if [ -z "$tag" ]; then
+            base_version=$(grep -E '^APP_VERSION_NAME=' gradle.properties | cut -d= -f2)
+            run_number=$(gh run view "${{ steps.r.outputs.id }}" -R "$GITHUB_REPOSITORY" --json number -q .number)
+            tag="v${base_version}.dev.${run_number}"
+          fi
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "release $tag already exists, adding assets"
           else

@@ -44,7 +44,10 @@ idea {
 
 def buildTimestamp = System.getenv('BUILD_TIMESTAMP') ?: '0'
 def commitId = System.getenv('COMMIT_ID')
-def verName = "${APP_VERSION_NAME}${commitId?.take(7) ? "-${commitId.take(7)}" : ''}"
+// CI passes the workflow run number, so every build is <name>.dev.<n>: unique, sortable and obvious in
+// the active sessions list. A local build without it keeps the upstream style with the commit id.
+def buildNumber = System.getenv('NFXP_BUILD_NUMBER')
+def verName = "${APP_VERSION_NAME}" + (buildNumber ? ".dev.${buildNumber}" : (commitId?.take(7) ? "-${commitId.take(7)}" : ""))
 def verCode = 1252
 
 def officialVer = APP_VERSION_NAME
