@@ -36,7 +36,20 @@ public final class TabletModeManager {
      */
     public static int getVideoControlsExtraInsetDp() {
         try {
-            return NekoConfig.tabletVideoExtraBottomInset.Int();
+            int index = NekoConfig.tabletVideoExtraBottomInset.Int();
+            if (index < 0) {
+                // self healing: an earlier build stored -1 as its "auto" sentinel, which the selector cell
+                // cannot index; rewrite it to the index based value
+                index = 0;
+                NekoConfig.tabletVideoExtraBottomInset.setConfigInt(0);
+            }
+            if (index == 0) {
+                return -1;
+            }
+            if (index > 5) {
+                return 32;
+            }
+            return (index - 1) * 8;
         } catch (Throwable ignore) {
             return -1;
         }

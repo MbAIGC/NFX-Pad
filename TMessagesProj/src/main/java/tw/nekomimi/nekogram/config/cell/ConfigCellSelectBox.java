@@ -65,8 +65,11 @@ public class ConfigCellSelectBox extends AbstractConfigCell implements WithBindC
     public void onBindViewHolder(RecyclerView.ViewHolder holder) {
         TextSettingsCell cell = (TextSettingsCell) holder.itemView;
         String valueText = "";
-        if (selectList != null && bindConfig.Int() < selectList.length) {
-            valueText = selectList[bindConfig.Int()];
+        if (selectList != null) {
+            // clamp: a stored value outside the list (e.g. a negative one written by an older build, or a
+            // value left behind after the list shrank) used to be indexed straight into the array and
+            // crashed while scrolling the row into view
+            valueText = selectList[Math.max(0, Math.min(bindConfig.Int(), selectList.length - 1))];
         }
         cell.setTextAndValue(title, valueText, false, cellGroup.needSetDivider(this), true);
     }
@@ -87,7 +90,7 @@ public class ConfigCellSelectBox extends AbstractConfigCell implements WithBindC
         }
 
         if (cellGroup.thisFragment instanceof BaseNekoXSettingsActivity activity) {
-            int current = bindConfig.Int();
+            int current = Math.max(0, selectList == null ? 0 : Math.min(bindConfig.Int(), selectList.length - 1));
             activity.showSingleChoiceDialog(context, title, selectList, current, activity.getResourceProvider(), new BaseNekoXSettingsActivity.RunnableInt() {
                 @Override
                 public void run(int index) {
