@@ -871,6 +871,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
 
                     private void onBackStartedInternal(BackEvent backEvent) {
+                        // stock tablet behaviour: onBackStarted/Progressed/Cancelled returned early there, so the
+                        // panes never animates unless the feature is on
+                        if (AndroidUtilities.isTablet() && !TabletModeManager.shouldApplyEnhancedMode()) return;
                         if (!onBackPressed(false)) return;
                         final ActionBarLayout layout = getBackGestureLayout();
                         if (layout == null) return;
@@ -9512,12 +9515,20 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 layersActionBarLayout.onBackPressed();
             } else {
                 if (rightActionBarLayout != null && rightActionBarLayout.getView().getVisibility() == View.VISIBLE && !rightActionBarLayout.getFragmentStack().isEmpty()) {
-                    // same pre-checks as the main pane (transition / swipe in progress, group call pip,
-                    // header search field, simple action bar, sheets); the close itself stays here so that
-                    // BaseFragment#finishFragment() keeps handling the parent dialog / preview delegate
-                    if (rightActionBarLayout.onBackPressedInternal()) {
+                    if (TabletModeManager.shouldApplyEnhancedMode()) {
+                        // same pre-checks as the main pane (transition / swipe in progress, group call pip,
+                        // header search field, simple action bar, sheets); the close itself stays here so
+                        // that BaseFragment#finishFragment() keeps handling the parent dialog / preview delegate
+                        if (rightActionBarLayout.onBackPressedInternal()) {
+                            BaseFragment lastFragment = rightActionBarLayout.getFragmentStack().get(rightActionBarLayout.getFragmentStack().size() - 1);
+                            lastFragment.finishFragment();
+                        }
+                    } else {
+                        // stock tablet behaviour
                         BaseFragment lastFragment = rightActionBarLayout.getFragmentStack().get(rightActionBarLayout.getFragmentStack().size() - 1);
-                        lastFragment.finishFragment();
+                        if (lastFragment.onBackPressed(true)) {
+                            lastFragment.finishFragment();
+                        }
                     }
                 } else {
                     actionBarLayout.onBackPressed();
