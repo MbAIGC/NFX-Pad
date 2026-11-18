@@ -989,6 +989,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      * layout only; the tablet panes are resolved per gesture so the right pane can slide as well.
      */
     private ActionBarLayout backGestureLayout;
+    /**
+     * Set while a chat is being opened through LaunchActivity itself (links, external intents, notifications,
+     * photo viewer jumps) rather than from the dialog list. Those must not replace what is already open, so
+     * that back returns to the chat the user came from.
+     */
+    private boolean presentChatOnTop;
     private Object onBackInvokedCallback;
 
     public static void showAttachMenuBot(LaunchActivity launchActivity, int currentAccount, TLRPC.TL_attachMenuBot attachMenuBot, String startApp, boolean sidemenu) {
@@ -7602,10 +7608,27 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     }
 
     public void presentFragment(BaseFragment fragment) {
+        if (fragment instanceof ChatActivity) {
+            presentChatOnTop = true;
+            try {
+                getActionBarLayout().presentFragment(fragment);
+            } finally {
+                presentChatOnTop = false;
+            }
+            return;
+        }
         getActionBarLayout().presentFragment(fragment);
     }
 
     public boolean presentFragment(final BaseFragment fragment, final boolean removeLast, boolean forceWithoutAnimation) {
+        if (fragment instanceof ChatActivity) {
+            presentChatOnTop = true;
+            try {
+                return getActionBarLayout().presentFragment(fragment, removeLast, forceWithoutAnimation, true, false);
+            } finally {
+                presentChatOnTop = false;
+            }
+        }
         return getActionBarLayout().presentFragment(fragment, removeLast, forceWithoutAnimation, true, false);
     }
 
@@ -9781,7 +9804,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     // links too (a message link to another channel is presented from the main pane, whose top
                     // fragment is the tab host, not a chat), so the channel the user came from was gone and a
                     // single back press emptied the pane. Push on top of the open chats instead.
-                    if (fragment instanceof ChatActivity && !rightActionBarLayout.getFragmentStack().isEmpty()) {
+                    final boolean pushOnTop = presentChatOnTop || layout.getLastFragment() instanceof ChatActivity;
+                    if (fragment instanceof ChatActivity && pushOnTop && !rightActionBarLayout.getFragmentStack().isEmpty()) {
                         TabletDebugLog.d("route", "push onto right pane: presenting " + fragment.getClass().getSimpleName()
                                 + " from " + (layout.getLastFragment() == null ? "?" : layout.getLastFragment().getClass().getSimpleName())
                                 + ", rightStack=" + rightActionBarLayout.getFragmentStack().size());
