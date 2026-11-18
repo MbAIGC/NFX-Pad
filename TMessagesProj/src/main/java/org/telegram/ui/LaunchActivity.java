@@ -8070,7 +8070,6 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     View feedbackView;
 
-    @Override
     /** Snapshot of what the shell is actually showing, for the resume / pause diagnostics. */
     private String panesState() {
         final StringBuilder b = new StringBuilder();
@@ -8090,6 +8089,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         return b.toString();
     }
 
+    @Override
     protected void onResume() {
         super.onResume();
         TabletDebugLog.d("life", "activity resume " + panesState());
