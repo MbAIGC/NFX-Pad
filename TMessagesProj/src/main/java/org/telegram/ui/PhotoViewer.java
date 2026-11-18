@@ -3588,6 +3588,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                TabletDebugLog.d("media", "seek down band=[" + getTop() + "," + getBottom() + "]"
+                        + " h=" + getHeight()
+                        + " parentH=" + (getParent() instanceof View ? ((View) getParent()).getHeight() : -1)
+                        + " offset=" + videoControlsGestureOffset);
+            }
             if (progress < 1f) {
                 return false;
             }
@@ -10014,7 +10020,9 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         // systemGestures even though the gesture strip is clearly active, so "auto" cannot depend on the
         // inset alone. A configured value always applies; auto falls back to a fixed lift when gestures are
         // on, and stays 0 otherwise so nothing changes where there is nothing to clear.
-        final int extra = dp(extraDp >= 0 ? extraDp : (gestureNav ? 24 : 8));
+        // measured on a OnePlus that reports 0 for both gesture insets: 16dp and 24dp were still inside the
+        // strip, 32dp clears it. On devices that do report 24dp the delta + 8dp path lands on the same 32dp.
+        final int extra = dp(extraDp >= 0 ? extraDp : (gestureNav ? 32 : 8));
         final int newOffset;
         if (delta > 0) {
             newOffset = delta + extra;
