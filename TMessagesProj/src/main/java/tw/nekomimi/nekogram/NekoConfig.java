@@ -91,6 +91,8 @@ public class NekoConfig {
      * string array with this value, so a negative "auto" sentinel would throw while binding the row.
      */
     public static ConfigItem tabletVideoExtraBottomInset = addConfig("TabletVideoExtraBottomInset", configTypeInt, 0);
+    /** Keeps the tablet diagnostics trail (logcat + shareable file) available for field reports. */
+    public static ConfigItem tabletDiagnostics = addConfig("TabletDiagnostics", configTypeBool, true);
 
     public static ConfigItem typeface = addConfig("TypefaceUseDefault", configTypeBool, false);
     public static ConfigItem forceFontWeightFallback = addConfig("forceFontWeightFallback", configTypeBool, false);

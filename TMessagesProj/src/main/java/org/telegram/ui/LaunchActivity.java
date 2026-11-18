@@ -990,6 +990,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      * layout only; the tablet panes are resolved per gesture so the right pane can slide as well.
      */
     private ActionBarLayout backGestureLayout;
+    /** Upper bound for the chats kept alive on the tablet right pane. */
+    private static final int MAX_RIGHT_PANE_CHATS = 8;
     private Object onBackInvokedCallback;
 
     public static void showAttachMenuBot(LaunchActivity launchActivity, int currentAccount, TLRPC.TL_attachMenuBot attachMenuBot, String startApp, boolean sidemenu) {
@@ -9793,6 +9795,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                             rightActionBarLayout.getView().setVisibility(View.VISIBLE);
                         }
                         backgroundTablet.setVisibility(View.GONE);
+                        // Pushing keeps every visited chat alive, so following a long chain of links would grow
+                        // the pane without a bound. Drop the oldest entries, the same way the overlay pane is
+                        // trimmed above.
+                        while (rightActionBarLayout.getFragmentStack().size() >= MAX_RIGHT_PANE_CHATS) {
+                            TabletDebugLog.d("route", "dropping oldest right pane chat, stack="
+                                    + rightActionBarLayout.getFragmentStack().size());
+                            rightActionBarLayout.removeFragmentFromStack(rightActionBarLayout.getFragmentStack().get(0));
+                        }
                         rightActionBarLayout.presentFragment(params.setNoAnimation(forceWithoutAnimation).setRemoveLast(removeLast).setCheckPresentFromDelegate(false));
                         return false;
                     }

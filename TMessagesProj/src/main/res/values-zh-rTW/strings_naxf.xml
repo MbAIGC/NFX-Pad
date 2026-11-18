@@ -383,4 +383,11 @@
     <string name="AIChatHistoryEmpty">還沒有儲存的對話</string>
     <string name="NavigationDrawerProxyPingShort">延遲 %1$d ms</string>
     <string name="RegexFiltersImportUrlHint">https://…</string>
+    <string name="TabletOptimizedMode">平板最佳化模式</string>
+    <string name="TabletOptimizedModeInfo">改善返回導覽，檢視留言後還原搜尋結果，並讓全螢幕影片控制列避開系統手勢區域。</string>
+    <string name="TabletVideoExtraBottomInset">影片控制列底部間距</string>
+    <string name="TabletDiagnostics">平板診斷記錄</string>
+    <string name="TabletDiagnosticsInfo">在本機記錄導覽與影片診斷資訊以便匯出。不會寫入搜尋關鍵字與訊息內容。</string>
+    <string name="TabletDiagnosticsEmpty">尚無診斷記錄</string>
+    <string name="ExportTabletDiagnostics">匯出平板診斷記錄</string>
 </resources>

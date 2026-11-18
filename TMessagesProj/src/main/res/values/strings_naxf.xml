@@ -316,4 +316,7 @@
     <string name="TabletOptimizedModeInfo">Improves return navigation, restores your search results after viewing comments, and keeps fullscreen video controls clear of the system gesture bar.</string>
     <string name="TabletVideoExtraBottomInset">Video controls bottom inset</string>
     <string name="ExportTabletDiagnostics">Export tablet diagnostics</string>
+    <string name="TabletDiagnostics">Tablet diagnostics log</string>
+    <string name="TabletDiagnosticsInfo">Record navigation and video diagnostics locally so they can be exported. Search terms and message content are never written.</string>
+    <string name="TabletDiagnosticsEmpty">No diagnostics recorded yet</string>
 </resources>

@@ -302,4 +302,11 @@
     <string name="StickerShapeRounded">圆角</string>
     <string name="StickerShapeRoundedMsg">消息</string>
     <string name="WeatherPickLocationHint">轻触以在地图上选择位置</string>
+    <string name="TabletOptimizedMode">平板优化模式</string>
+    <string name="TabletOptimizedModeInfo">优化返回导航，查看评论后恢复搜索结果，并让全屏视频控制栏避开系统手势区域。</string>
+    <string name="TabletVideoExtraBottomInset">视频控制栏底部间距</string>
+    <string name="TabletDiagnostics">平板诊断日志</string>
+    <string name="TabletDiagnosticsInfo">在本地记录导航与视频诊断信息以便导出。不会写入搜索关键词和消息内容。</string>
+    <string name="TabletDiagnosticsEmpty">暂无诊断记录</string>
+    <string name="ExportTabletDiagnostics">导出平板诊断日志</string>
 </resources>

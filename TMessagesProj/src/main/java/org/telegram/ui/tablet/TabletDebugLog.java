@@ -12,6 +12,8 @@ import androidx.core.content.FileProvider;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildConfig;
 
+import tw.nekomimi.nekogram.NekoConfig;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
@@ -84,6 +86,18 @@ public final class TabletDebugLog {
         return n == 0 ? "empty" : ("len=" + n);
     }
 
+    /** Master switch in code, then the user facing one. */
+    public static boolean isEnabled() {
+        if (!ENABLED) {
+            return false;
+        }
+        try {
+            return NekoConfig.tabletDiagnostics.Bool();
+        } catch (Throwable ignore) {
+            return true;
+        }
+    }
+
     private static boolean isAreaEnabled(String area) {
         return switch (area) {
             case "back" -> AREA_BACK;
@@ -96,7 +110,7 @@ public final class TabletDebugLog {
     }
 
     private static void write(String area, String message) {
-        if (!ENABLED || !isAreaEnabled(area)) {
+        if (!isAreaEnabled(area) || !isEnabled()) {
             return;
         }
         final String line = area + " | " + message;

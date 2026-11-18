@@ -120,6 +120,8 @@ public class NekoAppearanceSettingsActivity extends BaseNekoXSettingsActivity {
             "+24 dp",
             "+32 dp"
     }, null));
+    private final AbstractConfigCell tabletDiagnosticsRow = cellGroup.appendCell(
+            new ConfigCellTextCheck(NekoConfig.tabletDiagnostics, getString(R.string.TabletDiagnosticsInfo)));
     private final AbstractConfigCell exportDiagnosticsRow = cellGroup.appendCell(new ConfigCellText(
             "ExportTabletDiagnostics",
             () -> {
@@ -128,7 +130,7 @@ public class NekoAppearanceSettingsActivity extends BaseNekoXSettingsActivity {
                     return;
                 }
                 if (!org.telegram.ui.tablet.TabletDebugLog.share(activity)) {
-                    android.widget.Toast.makeText(activity, "No diagnostics recorded yet", android.widget.Toast.LENGTH_SHORT).show();
+                    android.widget.Toast.makeText(activity, getString(R.string.TabletDiagnosticsEmpty), android.widget.Toast.LENGTH_SHORT).show();
                 }
             }));
     private final AbstractConfigCell dividerAppearance = cellGroup.appendCell(new ConfigCellDivider());
