@@ -9,6 +9,7 @@
 package org.telegram.ui;
 
 import org.telegram.ui.tablet.TabletDebugLog;
+import org.telegram.ui.tablet.TabletModeManager;
 
 import static org.telegram.messenger.AndroidUtilities.dp;
 import static org.telegram.messenger.LocaleController.formatPluralString;
@@ -9781,7 +9782,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     // links too (a message link to another channel is presented from the main pane, whose top
                     // fragment is the tab host, not a chat), so the channel the user came from was gone and a
                     // single back press emptied the pane. Push on top of the open chats instead.
-                    final boolean pushOnTop = !params.fromFragment || params.presenterIsChat;
+                    // gated: with the switch off the stock tablet behaviour is kept unchanged
+                    final boolean pushOnTop = TabletModeManager.shouldApplyEnhancedMode()
+                            && (!params.fromFragment || params.presenterIsChat);
                     if (fragment instanceof ChatActivity && pushOnTop && !rightActionBarLayout.getFragmentStack().isEmpty()) {
                         TabletDebugLog.d("route", "push onto right pane: presenting " + fragment.getClass().getSimpleName()
                                 + " from " + (layout.getLastFragment() == null ? "?" : layout.getLastFragment().getClass().getSimpleName())
