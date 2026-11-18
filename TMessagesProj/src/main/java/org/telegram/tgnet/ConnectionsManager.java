@@ -239,7 +239,7 @@ public class ConnectionsManager extends BaseController {
      * Note that two installs of this build will look identical in the session list, so the hardware model is
      * no longer distinguishable there; the diagnostics header still records it locally.
      */
-    public static final String DEVICE_MODEL_NAME = "NagramXF Android";
+    public static final String DEVICE_MODEL_NAME = "NFXP Android";
 
     public ConnectionsManager(int instance) {
         super(instance);
