@@ -104,6 +104,7 @@ final class FloatingHost {
     private @Nullable ImageView settingsButton;
     private @Nullable ImageView moreButton;
     private @Nullable LinearLayout panelView;
+    private int panelKind = PANEL_NONE;
 
     private ScaleGestureDetector scaleGestureDetector;
     private GestureDetectorFixDoubleTap gestureDetector;
@@ -1061,27 +1062,33 @@ final class FloatingHost {
         final int padding = dp(8);
         final int margin = 4;
         final int buttonSize = 38;
+        final int actionStep = buttonSize + 6;
 
-        // All entries share one row in the top right corner, ordered right to left: close, expand,
-        // share, settings, more. Five 38dp buttons need 214dp, which fits the smallest window (484dp).
-        final int rowTop = margin;
-        int actionIndex = 0;
-        final ImageView closeButton = createActionButton(context, R.drawable.pip_video_close, padding, margin, buttonSize, rowTop, actionIndex++);
+        // The three corner entries are the ones the viewer action bar has for a video, with the same
+        // icons and in the same left to right order: forward (share), video settings (speed and
+        // quality) and more. Close and expand get one corner each, where the system PiP window puts
+        // them, so the row of three stays the row the viewer shows.
+        shareButton = createActionButton(context, R.drawable.msg_header_share, padding, buttonSize);
+        controlsView.addView(shareButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin + 2 * actionStep, 0));
+        shareButton.setVisibility(content.canShare() ? View.VISIBLE : View.GONE);
+        shareButton.setOnClickListener(v -> content.share());
+
+        settingsButton = createActionButton(context, R.drawable.video_settings, padding, buttonSize);
+        controlsView.addView(settingsButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin + actionStep, 0));
+        settingsButton.setVisibility(content.canChangeSpeed() || !content.getQualityOptions().isEmpty() ? View.VISIBLE : View.GONE);
+        settingsButton.setOnClickListener(v -> togglePanel(PANEL_SETTINGS));
+
+        moreButton = createActionButton(context, R.drawable.media_more, padding, buttonSize);
+        controlsView.addView(moreButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin, 0));
+        moreButton.setOnClickListener(v -> togglePanel(PANEL_MORE));
+
+        final ImageView closeButton = createActionButton(context, R.drawable.pip_video_close, padding, buttonSize);
+        controlsView.addView(closeButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.LEFT, margin, margin, 0, 0));
         closeButton.setOnClickListener(v -> session.dismiss());
 
-        final ImageView expandButton = createActionButton(context, R.drawable.pip_video_expand, padding, margin, buttonSize, rowTop, actionIndex++);
+        final ImageView expandButton = createActionButton(context, R.drawable.pip_video_expand, padding, buttonSize);
+        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.BOTTOM | Gravity.RIGHT, 0, 0, margin, dp(6)));
         expandButton.setOnClickListener(v -> session.expand());
-
-        if (content.canShare()) {
-            shareButton = createActionButton(context, R.drawable.msg_shareout, padding, margin, buttonSize, rowTop, actionIndex++);
-            shareButton.setOnClickListener(v -> content.share());
-        }
-        if (content.canOpenSettings()) {
-            settingsButton = createActionButton(context, R.drawable.msg_settings_old, padding, margin, buttonSize, rowTop, actionIndex++);
-            settingsButton.setOnClickListener(v -> togglePanel(true));
-        }
-        moreButton = createActionButton(context, R.drawable.ic_ab_other, padding, margin, buttonSize, rowTop, actionIndex++);
-        moreButton.setOnClickListener(v -> showMoreMenu());
 
         playPauseButton = new ImageView(context);
         ThemeBind.colorFilter(playPauseButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
@@ -1112,38 +1119,64 @@ final class FloatingHost {
                 + " playPauseVisible=" + (playPauseButton != null && playPauseButton.getVisibility() == View.VISIBLE));
     }
 
-    private ImageView createActionButton(Context context, int iconRes, int padding, int margin, int size, int top, int index) {
+    /** A bare icon button; the caller decides the corner, so the row of three stays the viewer's row. */
+    private ImageView createActionButton(Context context, int iconRes, int padding, int size) {
         final ImageView button = new ImageView(context);
         button.setImageResource(iconRes);
         ThemeBind.colorFilter(button, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
         ThemeBind.selectorBackground(button, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
         button.setPadding(padding, padding, padding, padding);
-        // laid out right to left, so the first action sits closest to the corner
-        controlsView.addView(button, LayoutHelper.createFrame(size, size, Gravity.RIGHT, 0, top, margin + index * (size + 6), 0));
         return button;
     }
 
+    private static final int PANEL_NONE = 0;
+    private static final int PANEL_SETTINGS = 1;
+    private static final int PANEL_MORE = 2;
+
     /**
-     * Quality and speed live in a panel inside the window, not in a dialog: the window is a separate
-     * WindowManager window while the app is in the background, so a dialog attached to the activity would
-     * be invisible there.
+     * Quality, speed and the remaining entries live in a panel inside the window, not in a dialog:
+     * the window is a separate WindowManager window, so a dialog attached to the activity would be
+     * invisible while the window floats over another app.
      */
-    private void togglePanel(boolean show) {
-        if (!show) {
-            if (panelView != null) {
-                controlsView.removeView(panelView);
-                panelView = null;
-            }
-            return;
+    private void togglePanel(int kind) {
+        if (panelView != null && panelKind == kind) {
+            hidePanel();
+        } else {
+            showPanel(kind);
         }
-        if (panelView != null) {
-            return;
-        }
+    }
+
+    private void showPanel(int kind) {
+        hidePanel();
         final Context context = controlsView.getContext();
         final LinearLayout panel = new LinearLayout(context);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackgroundColor(0xE6181818);
         panel.setPadding(dp(12), dp(8), dp(12), dp(8));
+        if (kind == PANEL_MORE) {
+            buildMorePanel(context, panel);
+        } else {
+            buildSettingsPanel(context, panel);
+        }
+        if (panel.getChildCount() == 0) {
+            return;
+        }
+        panelKind = kind;
+        panelView = panel;
+        controlsView.addView(panel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+        showControlsTemporarily(4000);
+    }
+
+    private void hidePanel() {
+        if (panelView != null) {
+            controlsView.removeView(panelView);
+            panelView = null;
+        }
+        panelKind = PANEL_NONE;
+    }
+
+    /** Quality and speed: the same two groups the viewer video settings popup has. */
+    private void buildSettingsPanel(Context context, LinearLayout panel) {
 
         final java.util.List<CharSequence> qualities = content.getQualityOptions();
         if (!qualities.isEmpty()) {
@@ -1163,8 +1196,7 @@ final class FloatingHost {
                 row.setPadding(dp(4), dp(6), dp(4), dp(6));
                 row.setOnClickListener(v -> {
                     content.selectQuality(index);
-                    togglePanel(false);
-                    togglePanel(true);
+                    showPanel(PANEL_SETTINGS);
                 });
                 panel.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
             }
@@ -1191,60 +1223,36 @@ final class FloatingHost {
                 chip.setPadding(dp(10), dp(4), dp(10), dp(4));
                 chip.setOnClickListener(v -> {
                     content.setPlaybackSpeed(speed);
-                    togglePanel(false);
-                    togglePanel(true);
+                    showPanel(PANEL_SETTINGS);
                 });
                 speedRow.addView(chip, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 0));
             }
             panel.addView(speedRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
         }
-
-        if (content.canShowInChat()) {
-            final TextView showInChat = new TextView(context);
-            showInChat.setText(LocaleController.getString(R.string.ShowInChat));
-            showInChat.setTextColor(0xFFFFFFFF);
-            showInChat.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-            showInChat.setPadding(dp(4), dp(8), dp(4), dp(8));
-            showInChat.setOnClickListener(v -> content.showInChat());
-            panel.addView(showInChat, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
-        }
-
-        panelView = panel;
-        controlsView.addView(panel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
-        showControlsTemporarily(4000);
     }
 
-    /** Share / settings for the floating window: one entry point so the corner does not fill up. */
-    private void showMoreMenu() {
-        TabletDebugLog.d("pip", "more menu opened");
-        if (activity == null || activity.isFinishing()) {
-            return;
-        }
-        final ArrayList<CharSequence> labels = new ArrayList<>();
-        final ArrayList<Integer> ids = new ArrayList<>();
+    /** The entries that have no icon of their own in the row: show in chat, forward, close. */
+    private void buildMorePanel(Context context, LinearLayout panel) {
         if (content.canShowInChat()) {
-            labels.add(LocaleController.getString(R.string.ShowInChat));
-            ids.add(3);
+            addPanelRow(context, panel, LocaleController.getString(R.string.ShowInChat), () -> content.showInChat());
         }
         if (content.canShare()) {
-            labels.add(LocaleController.getString(R.string.ShareFile));
-            ids.add(1);
+            addPanelRow(context, panel, LocaleController.getString(R.string.ShareFile), () -> content.share());
         }
-        if (labels.isEmpty()) {
-            return;
-        }
-        final AlertDialog.Builder builder = new AlertDialog.Builder(activity);
-        builder.setItems(labels.toArray(new CharSequence[0]), (dialog, which) -> {
-            final int id = ids.get(which);
-            if (id == 1) {
-                content.share();
-            } else if (id == 2) {
-                content.openSettings();
-            } else if (id == 3) {
-                content.showInChat();
-            }
+        addPanelRow(context, panel, LocaleController.getString(R.string.Close), session::dismiss);
+    }
+
+    private void addPanelRow(Context context, LinearLayout panel, CharSequence text, Runnable action) {
+        final TextView row = new TextView(context);
+        row.setText(text);
+        row.setTextColor(0xFFFFFFFF);
+        row.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+        row.setPadding(dp(4), dp(8), dp(4), dp(8));
+        row.setOnClickListener(v -> {
+            hidePanel();
+            action.run();
         });
-        builder.show();
+        panel.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
     }
 
     private final class VideoProgressView extends View {
@@ -1291,6 +1299,11 @@ final class FloatingHost {
                     // only the band around the drawn line takes the drag: above it stays with the buttons
                     // and with the window drag gesture
                     if (event.getY() < getHeight() - dp(48)) {
+                        return false;
+                    }
+                    // the expand button sits in this corner, as the exit-fullscreen button does in the
+                    // viewer: leave the corner to it and keep the rest of the band draggable
+                    if (event.getX() >= getWidth() - dp(46)) {
                         return false;
                     }
                     seeking = true;

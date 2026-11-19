@@ -24254,9 +24254,32 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         return out;
     }
 
-    private static final int ACTION_PIP_SPEED = 1;
-    private static final int ACTION_PIP_BACK = 2;
-    private static final int ACTION_PIP_FORWARD = 3;
+    // the three entries of the viewer action bar, in the same order the system PiP shows them
+    private static final int ACTION_PIP_SHARE = 1;
+    private static final int ACTION_PIP_SETTINGS = 2;
+    private static final int ACTION_PIP_MORE = 3;
+
+    /** The speed value as the viewer shows it: "1x", "1.5x". */
+    private static String formatVideoSpeed(float speed) {
+        if (Math.abs(speed - Math.round(speed)) < 0.01f) {
+            return Math.round(speed) + "x";
+        }
+        return String.format(Locale.US, "%.1fx", speed);
+    }
+
+    /**
+     * Runs a PiP button whose action needs the app's own UI. System PiP buttons arrive while only
+     * the small window is visible, where a fragment or a popup cannot be shown, so the app is
+     * brought back first.
+     */
+    private void runInApp(@NonNull Runnable action) {
+        final PipSession session = pipSession;
+        if (session == null || !session.isAlive()) {
+            action.run();
+            return;
+        }
+        session.runInApp(action);
+    }
 
     private final PipContent pipContent = new PipContent() {
         private boolean isEmbed() {
@@ -24352,15 +24375,17 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         @Override
         public void getSystemActions(@NonNull java.util.List<org.telegram.utils.pip.PipAction> out, int maxActions) {
-            // Only icon buttons are possible in system PiP, so the speed entry cycles instead of opening a menu.
-            // Order matters: the system keeps at most maxActions, and the most useful ones go first.
-            final java.util.ArrayList<org.telegram.utils.pip.PipAction> actions = new java.util.ArrayList<>();
-            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SPEED, R.drawable.msg_speed_normal,
-                    getString(R.string.VideoPlayerSpeed) + " " + currentVideoSpeed + "x", videoPlayer != null));
-            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_BACK, R.drawable.nfxp_rewind_10,
-                    "-10s", videoPlayer != null));
-            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_FORWARD, R.drawable.nfxp_forward_10,
-                    "+10s", videoPlayer != null));
+            // Exactly the three entries the viewer action bar shows for a video, with the same icons
+            // and in the same order: forward, video settings, more. Order matters, the system keeps
+            // the first maxActions entries. System PiP accepts an icon and a title only, so the
+            // settings entry switches the speed and its title carries the value it is on.
+            final java.util.ArrayList<org.telegram.utils.pip.PipAction> actions = new java.util.ArrayList<>(3);
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SHARE, R.drawable.msg_header_share,
+                    getString(R.string.Forward), canShare()));
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SETTINGS, R.drawable.video_settings,
+                    getString(R.string.VideoPlayerSpeed) + " " + formatVideoSpeed(currentVideoSpeed), canChangeSpeed()));
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_MORE, R.drawable.media_more,
+                    getString(R.string.AccDescrMoreOptions), true));
             for (int i = 0; i < actions.size() && out.size() < maxActions; i++) {
                 out.add(actions.get(i));
             }
@@ -24368,11 +24393,12 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         @Override
         public void onSystemAction(int actionId) {
-            if (videoPlayer == null) {
-                return;
-            }
-            if (actionId == ACTION_PIP_SPEED) {
-                // cycle 1x -> 1.5x -> 2x -> 0.5x -> 1x
+            if (actionId == ACTION_PIP_SETTINGS) {
+                // no popup is possible in the small system window: this entry switches the speed,
+                // and the params are rebuilt so its title shows the value it moved to
+                if (!canChangeSpeed()) {
+                    return;
+                }
                 final float next;
                 if (currentVideoSpeed < 1f) {
                     next = 1f;
@@ -24384,15 +24410,18 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     next = 0.5f;
                 }
                 chooseSpeed(next, true, false);
-            } else if (actionId == ACTION_PIP_BACK || actionId == ACTION_PIP_FORWARD) {
-                final long total = videoPlayer.getDuration();
-                final long current = videoPlayer.getCurrentPosition();
-                if (total <= 0) {
-                    return;
+                if (pipSession != null) {
+                    pipSession.invalidate();
                 }
-                final long delta = 10_000L;
-                final long target = Math.max(0, Math.min(total, current + (actionId == ACTION_PIP_FORWARD ? delta : -delta)));
-                videoPlayer.seekTo(target);
+            } else if (actionId == ACTION_PIP_SHARE) {
+                // the forward picker is a fragment of the app, not of the small window
+                runInApp(this::share);
+            } else if (actionId == ACTION_PIP_MORE) {
+                runInApp(() -> {
+                    if (menuItem != null) {
+                        menuItem.toggleSubMenu();
+                    }
+                });
             }
         }
 

@@ -113,6 +113,15 @@ public final class PipSession {
     }
 
     /**
+     * Brings the app back from system PiP and runs the action once it is resumed. Used by system
+     * PiP buttons that need the app's own UI (forward picker, popups): they arrive as broadcasts
+     * while only the small window is visible.
+     */
+    public void runInApp(@NonNull Runnable action) {
+        coordinator.runInApp(action);
+    }
+
+    /**
      * Called by the content during its expand transition: removes the floating window and hands
      * the texture back. The content must already cover the window with its own placeholder.
      */
