@@ -68,7 +68,7 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "release $tag already exists, adding assets"
           else
-            gh release create "$tag" --title "NFX-Pad $tag" --generate-notes --prerelease
+            gh release create "$tag" --title "NFX-Pad ${tag#v}" --generate-notes --prerelease
           fi
           ls -l apks/*.apk
           gh release upload "$tag" apks/*.apk --clobber

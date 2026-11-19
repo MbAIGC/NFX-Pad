@@ -16,11 +16,6 @@ on:
       - '.github/**'
       - '!.github/workflows/nfxp.yml'
   workflow_dispatch:
-    inputs:
-      release:
-        description: 'Publish a GitHub release with the built APKs'
-        type: boolean
-        default: false
 
 permissions:
   contents: write
@@ -112,8 +107,8 @@ jobs:
       - name: Publish release
         # Attaching the APKs to a release makes them downloadable without signing in to Actions.
         # Publishing straight from the runner avoids downloading the artifacts and uploading them again.
-        # Runs on "Run workflow" with release checked, or on any push whose commit message has [release].
-        if: success() && (inputs.release || contains(github.event.head_commit.message, '[release]'))
+        # Runs after every successful build: the tag carries the run number, so each build gets its own.
+        if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
