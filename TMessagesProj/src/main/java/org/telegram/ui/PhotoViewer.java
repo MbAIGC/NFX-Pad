@@ -24291,6 +24291,24 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
 
         @Override
+        public boolean canShowInChat() {
+            return currentMessageObject != null && parentChatActivity != null;
+        }
+
+        @Override
+        public void showInChat() {
+            if (currentMessageObject == null) {
+                return;
+            }
+            final ChatActivity chat = parentChatActivity;
+            if (chat == null) {
+                return;
+            }
+            closePhoto(true, false);
+            chat.scrollToMessageId(currentMessageObject.getId(), 0, true, 0, true, 0);
+        }
+
+        @Override
         public boolean canOpenSettings() {
             return parentActivity instanceof LaunchActivity;
         }

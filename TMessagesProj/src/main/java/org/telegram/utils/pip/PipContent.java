@@ -139,6 +139,13 @@ public interface PipContent {
 
     default void openSettings() {}
 
+    /** The floating window offers a "show in chat" entry. */
+    default boolean canShowInChat() {
+        return false;
+    }
+
+    default void showInChat() {}
+
     /** Buttons of the system PiP window, at most {@code maxActions}. */
     default void getSystemActions(@NonNull java.util.List<PipAction> out, int maxActions) {}
 

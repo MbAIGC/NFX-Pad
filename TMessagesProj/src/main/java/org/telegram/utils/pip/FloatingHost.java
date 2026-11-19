@@ -97,6 +97,8 @@ final class FloatingHost {
     private FrameLayout controlsView;
     private ImageView playPauseButton;
     private VideoProgressView videoProgressView;
+    private @Nullable ImageView shareButton;
+    private @Nullable ImageView settingsButton;
     private @Nullable ImageView moreButton;
 
     private ScaleGestureDetector scaleGestureDetector;
@@ -1072,15 +1074,20 @@ final class FloatingHost {
         expandButton.setOnClickListener(v -> session.expand());
         controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, buttonSize + margin + 6, 0));
 
-        if (content.canShare() || content.canOpenSettings()) {
-            moreButton = new ImageView(context);
-            moreButton.setImageResource(R.drawable.ic_ab_other);
-            ThemeBind.colorFilter(moreButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
-            ThemeBind.selectorBackground(moreButton, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
-            moreButton.setPadding(padding, padding, padding, padding);
-            moreButton.setOnClickListener(v -> showMoreMenu());
-            controlsView.addView(moreButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, (buttonSize + margin + 6) * 2, 0));
+        // Same three entries as the full screen viewer, side by side in the top right corner, so the
+        // floating window does not need a menu for them.
+        final int actionRowTop = margin + (buttonSize + margin + 6) * 2;
+        int actionIndex = 0;
+        if (content.canShare()) {
+            shareButton = createActionButton(context, R.drawable.msg_shareout, padding, margin, buttonSize, actionRowTop, actionIndex++);
+            shareButton.setOnClickListener(v -> content.share());
         }
+        if (content.canOpenSettings()) {
+            settingsButton = createActionButton(context, R.drawable.msg_settings_old, padding, margin, buttonSize, actionRowTop, actionIndex++);
+            settingsButton.setOnClickListener(v -> content.openSettings());
+        }
+        moreButton = createActionButton(context, R.drawable.ic_ab_other, padding, margin, buttonSize, actionRowTop, actionIndex++);
+        moreButton.setOnClickListener(v -> showMoreMenu());
 
         playPauseButton = new ImageView(context);
         ThemeBind.colorFilter(playPauseButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
@@ -1111,6 +1118,17 @@ final class FloatingHost {
                 + " playPauseVisible=" + (playPauseButton != null && playPauseButton.getVisibility() == View.VISIBLE));
     }
 
+    private ImageView createActionButton(Context context, int iconRes, int padding, int margin, int size, int top, int index) {
+        final ImageView button = new ImageView(context);
+        button.setImageResource(iconRes);
+        ThemeBind.colorFilter(button, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
+        ThemeBind.selectorBackground(button, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
+        button.setPadding(padding, padding, padding, padding);
+        // laid out right to left, so the first action sits closest to the corner
+        controlsView.addView(button, LayoutHelper.createFrame(size, size, Gravity.RIGHT, 0, top, margin + index * (size + 6), 0));
+        return button;
+    }
+
     /** Share / settings for the floating window: one entry point so the corner does not fill up. */
     private void showMoreMenu() {
         TabletDebugLog.d("pip", "more menu opened");
@@ -1119,6 +1137,10 @@ final class FloatingHost {
         }
         final ArrayList<CharSequence> labels = new ArrayList<>();
         final ArrayList<Integer> ids = new ArrayList<>();
+        if (content.canShowInChat()) {
+            labels.add(LocaleController.getString(R.string.ShowInChat));
+            ids.add(3);
+        }
         if (content.canShare()) {
             labels.add(LocaleController.getString(R.string.ShareFile));
             ids.add(1);
@@ -1137,6 +1159,8 @@ final class FloatingHost {
                 content.share();
             } else if (id == 2) {
                 content.openSettings();
+            } else if (id == 3) {
+                content.showInChat();
             }
         });
         builder.show();
