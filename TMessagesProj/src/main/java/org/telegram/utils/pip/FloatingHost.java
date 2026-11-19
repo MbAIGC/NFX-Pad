@@ -47,6 +47,7 @@ import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
 import org.telegram.ui.ActionBar.AlertDialog;
+import org.telegram.ui.tablet.TabletDebugLog;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -248,6 +249,13 @@ final class FloatingHost {
 
         createSprings();
         createViews();
+        TabletDebugLog.d("pip", "floating show overlay=" + shouldUseOverlay()
+                + " canOverlay=" + PipEnvironment.canDrawOverlays(activity)
+                + " isOverlayAllowed=" + content.isOverlayAllowed()
+                + " playbackControls=" + content.hasPlaybackControls()
+                + " canShare=" + content.canShare()
+                + " canSettings=" + content.canOpenSettings()
+                + " size=" + pipWidth + "x" + pipHeight);
 
         floatingView = content.getFloatingView();
         if (floatingView != null) {
@@ -1098,10 +1106,14 @@ final class FloatingHost {
         controlsView.addView(videoProgressView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
 
         contentFrameLayout.addView(controlsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
+        TabletDebugLog.d("pip", "controls built moreButton=" + (moreButton != null)
+                + " progressVisible=" + (videoProgressView != null && videoProgressView.getVisibility() == View.VISIBLE)
+                + " playPauseVisible=" + (playPauseButton != null && playPauseButton.getVisibility() == View.VISIBLE));
     }
 
     /** Share / settings for the floating window: one entry point so the corner does not fill up. */
     private void showMoreMenu() {
+        TabletDebugLog.d("pip", "more menu opened");
         if (activity == null || activity.isFinishing()) {
             return;
         }
@@ -1169,6 +1181,8 @@ final class FloatingHost {
             }
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    TabletDebugLog.d("pip", "progress touch down y=" + event.getY() + " h=" + getHeight()
+                            + " band=" + (getHeight() - dp(24)));
                     // only the band around the drawn line takes the drag: above it stays with the buttons
                     // and with the window drag gesture
                     if (event.getY() < getHeight() - dp(24)) {

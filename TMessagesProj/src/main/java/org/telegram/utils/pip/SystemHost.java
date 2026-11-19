@@ -24,6 +24,7 @@ import androidx.media3.common.Player;
 import androidx.media3.session.MediaSession;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.ui.tablet.TabletDebugLog;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.utils.WindowVisibilityManager;
 
@@ -194,6 +195,8 @@ final class SystemHost {
 
     @RequiresApi(api = Build.VERSION_CODES.O)
     private PictureInPictureParams buildParams(@NonNull PipSession session) {
+        TabletDebugLog.d("pip", "system pip params content=" + session.content.getClass().getSimpleName()
+                + " state=" + session.state);
         final PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
         keyBuilder.setLength(0);
         final int width = session.content.getContentWidth();
