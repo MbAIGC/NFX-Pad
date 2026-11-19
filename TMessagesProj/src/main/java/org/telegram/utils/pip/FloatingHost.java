@@ -43,8 +43,10 @@ import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.R;
+import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
+import org.telegram.ui.ActionBar.AlertDialog;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeBind;
 import org.telegram.ui.Components.CubicBezierInterpolator;
@@ -94,6 +96,7 @@ final class FloatingHost {
     private FrameLayout controlsView;
     private ImageView playPauseButton;
     private VideoProgressView videoProgressView;
+    private @Nullable ImageView moreButton;
 
     private ScaleGestureDetector scaleGestureDetector;
     private GestureDetectorFixDoubleTap gestureDetector;
@@ -597,7 +600,7 @@ final class FloatingHost {
     }
 
     private void updateProgress() {
-        if (videoProgressView == null || isVideoCompleted) {
+        if (videoProgressView == null || isVideoCompleted || videoProgressView.isSeeking()) {
             return;
         }
         final long duration = content.getDuration();
@@ -1061,6 +1064,16 @@ final class FloatingHost {
         expandButton.setOnClickListener(v -> session.expand());
         controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, buttonSize + margin + 6, 0));
 
+        if (content.canShare() || content.canOpenSettings()) {
+            moreButton = new ImageView(context);
+            moreButton.setImageResource(R.drawable.ic_ab_other);
+            ThemeBind.colorFilter(moreButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
+            ThemeBind.selectorBackground(moreButton, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
+            moreButton.setPadding(padding, padding, padding, padding);
+            moreButton.setOnClickListener(v -> showMoreMenu());
+            controlsView.addView(moreButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, (buttonSize + margin + 6) * 2, 0));
+        }
+
         playPauseButton = new ImageView(context);
         ThemeBind.colorFilter(playPauseButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
         ThemeBind.selectorBackground(playPauseButton, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
@@ -1087,6 +1100,36 @@ final class FloatingHost {
         contentFrameLayout.addView(controlsView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
     }
 
+    /** Share / settings for the floating window: one entry point so the corner does not fill up. */
+    private void showMoreMenu() {
+        if (activity == null || activity.isFinishing()) {
+            return;
+        }
+        final ArrayList<CharSequence> labels = new ArrayList<>();
+        final ArrayList<Integer> ids = new ArrayList<>();
+        if (content.canShare()) {
+            labels.add(LocaleController.getString(R.string.ShareFile));
+            ids.add(1);
+        }
+        if (content.canOpenSettings()) {
+            labels.add(LocaleController.getString(R.string.Settings));
+            ids.add(2);
+        }
+        if (labels.isEmpty()) {
+            return;
+        }
+        final AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        builder.setItems(labels.toArray(new CharSequence[0]), (dialog, which) -> {
+            final int id = ids.get(which);
+            if (id == 1) {
+                content.share();
+            } else if (id == 2) {
+                content.openSettings();
+            }
+        });
+        builder.show();
+    }
+
     private final class VideoProgressView extends View {
         private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint bufferPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1102,6 +1145,70 @@ final class FloatingHost {
             bufferPaint.setStyle(Paint.Style.STROKE);
             bufferPaint.setStrokeCap(Paint.Cap.ROUND);
             bufferPaint.setStrokeWidth(dp(2));
+        }
+
+        private boolean seeking;
+
+        boolean isSeeking() {
+            return seeking;
+        }
+
+        @Override
+        public boolean onTouchEvent(@NonNull MotionEvent event) {
+            if (!content.hasPlaybackControls()) {
+                return false;
+            }
+            final long duration = content.getDuration();
+            if (duration <= 0 || duration == C.TIME_UNSET) {
+                return false;
+            }
+            final float left = dp(10);
+            final float available = getWidth() - left - dp(10);
+            if (available <= 0) {
+                return false;
+            }
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    // only the band around the drawn line takes the drag: above it stays with the buttons
+                    // and with the window drag gesture
+                    if (event.getY() < getHeight() - dp(24)) {
+                        return false;
+                    }
+                    seeking = true;
+                    AndroidUtilities.cancelRunOnUIThread(progressRunnable);
+                    seekToTouch(event.getX(), left, available, duration);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (!seeking) {
+                        return false;
+                    }
+                    seekToTouch(event.getX(), left, available, duration);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (!seeking) {
+                        return false;
+                    }
+                    seekToTouch(event.getX(), left, available, duration);
+                    seeking = false;
+                    updatePlayButton();
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    if (!seeking) {
+                        return false;
+                    }
+                    seeking = false;
+                    updatePlayButton();
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private void seekToTouch(float x, float left, float available, long duration) {
+            final float progress = MathUtils.clamp((x - left) / available, 0f, 1f);
+            videoProgress = progress;
+            content.seekTo((long) (progress * duration));
+            invalidate();
         }
 
         @Override

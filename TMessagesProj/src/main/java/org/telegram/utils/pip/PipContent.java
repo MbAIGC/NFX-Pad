@@ -123,6 +123,22 @@ public interface PipContent {
     /** The view from {@link #createSystemView} is detached and not used any more. */
     default void releaseSystemView(@NonNull View systemView) {}
 
+    /* Menu of the in-app floating window */
+
+    /** The floating window offers a share entry. */
+    default boolean canShare() {
+        return false;
+    }
+
+    default void share() {}
+
+    /** The floating window offers a settings entry. */
+    default boolean canOpenSettings() {
+        return false;
+    }
+
+    default void openSettings() {}
+
     /** Buttons of the system PiP window, at most {@code maxActions}. */
     default void getSystemActions(@NonNull java.util.List<PipAction> out, int maxActions) {}
 

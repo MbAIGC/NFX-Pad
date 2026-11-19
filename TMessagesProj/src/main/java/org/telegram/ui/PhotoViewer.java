@@ -24275,6 +24275,37 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         }
 
         @Override
+        public boolean canShare() {
+            return currentMessageObject != null && parentActivity instanceof LaunchActivity;
+        }
+
+        @Override
+        public void share() {
+            if (currentMessageObject == null || !(parentActivity instanceof LaunchActivity)) {
+                return;
+            }
+            final ArrayList<MessageObject> messages = new ArrayList<>();
+            messages.add(currentMessageObject);
+            // same path as the viewer menu entry: pick a chat and forward, which also leaves PiP
+            showForward(messages, false);
+        }
+
+        @Override
+        public boolean canOpenSettings() {
+            return parentActivity instanceof LaunchActivity;
+        }
+
+        @Override
+        public void openSettings() {
+            if (!(parentActivity instanceof LaunchActivity)) {
+                return;
+            }
+            final LaunchActivity launchActivity = (LaunchActivity) parentActivity;
+            closePhoto(true, false);
+            launchActivity.presentFragment(new SettingsActivity());
+        }
+
+        @Override
         public int getContentWidth() {
             if (isEmbed()) {
                 return photoViewerWebView.getEmbedWidth();
