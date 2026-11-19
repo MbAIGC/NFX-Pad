@@ -3,6 +3,8 @@ name: Publish APK release
 # Publishes an APK that has already been built - no compilation, no checkout of the
 # toolchain. Used to turn an existing "NFX-Pad build" artifact into a downloadable
 # release without rebuilding (~2 minutes instead of ~16).
+#
+# Trigger: push touching this file with [publish] in the commit message, or Run workflow.
 
 on:
   # workflow_dispatch only shows up when the file is on the default branch, so a push marker is
