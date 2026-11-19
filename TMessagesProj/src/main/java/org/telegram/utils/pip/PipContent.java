@@ -151,7 +151,18 @@ public interface PipContent {
 
     default void setPlaybackSpeed(float speed) {}
 
-    /** Quality options for the in-window panel; empty hides the quality section. */
+    /** The in-app menu offers the loop entry, as the viewer video settings popup does. */
+    default boolean canLoop() {
+        return false;
+    }
+
+    default boolean isLooping() {
+        return false;
+    }
+
+    default void setLooping(boolean looping) {}
+
+    /** Quality options for the in-app menu; empty hides the quality section. */
     default @NonNull java.util.List<CharSequence> getQualityOptions() {
         return java.util.Collections.emptyList();
     }

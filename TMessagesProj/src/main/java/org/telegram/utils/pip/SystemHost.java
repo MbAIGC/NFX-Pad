@@ -7,6 +7,10 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.app.PictureInPictureParams;
 import android.app.PictureInPictureUiState;
@@ -17,9 +21,11 @@ import android.util.Rational;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
+import androidx.core.content.ContextCompat;
 import androidx.media3.common.Player;
 import androidx.media3.session.MediaSession;
 
@@ -29,6 +35,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.utils.WindowVisibilityManager;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * System PiP of the whole activity. At most one session at a time.
@@ -57,6 +64,17 @@ final class SystemHost {
     private final RectF tmpRectF = new RectF();
     private final int[] tmpLocation = new int[2];
 
+    /**
+     * The system draws an action into a box of its own fixed size, and an icon drawn in its own
+     * 24dp canvas keeps padding the glyph cannot use: the app's only lever is what the icon
+     * itself paints. Icons are re-rendered one box size up with the glyph filling most of it.
+     */
+    private static final int ACTION_ICON_BOX_DP = 26;
+    private static final float ACTION_ICON_FILL = 0.92f;
+
+    /** Rendered action icons by resource; the params (and so the actions) are rebuilt often. */
+    private final HashMap<Integer, Icon> actionIcons = new HashMap<>();
+
     SystemHost(PipCoordinator coordinator) {
         this.coordinator = coordinator;
     }
@@ -71,6 +89,7 @@ final class SystemHost {
 
     void detach() {
         releaseMediaSession();
+        actionIcons.clear();
         if (receiverRegistered && activity != null) {
             receiverRegistered = false;
             try {
@@ -271,7 +290,7 @@ final class SystemHost {
             intent.putExtra(EXTRA_ACTION_ID, action.id);
             // the request code is the action id: the same PendingIntent is reused, not piled up
             final PendingIntent pendingIntent = PendingIntent.getBroadcast(activity, action.id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-            final RemoteAction remoteAction = new RemoteAction(Icon.createWithResource(activity, action.iconRes), action.title, action.title, pendingIntent);
+            final RemoteAction remoteAction = new RemoteAction(actionIcon(activity, action.iconRes), action.title, action.title, pendingIntent);
             remoteAction.setEnabled(action.enabled);
             result.add(remoteAction);
         }
@@ -285,6 +304,67 @@ final class SystemHost {
                 activity.registerReceiver(actionReceiver, filter);
             }
         }
+        return result;
+    }
+
+    /** The icon of one action, drawn larger than the glyph of the resource as it is. */
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private @NonNull Icon actionIcon(@NonNull Activity host, @DrawableRes int iconRes) {
+        final Icon cached = actionIcons.get(iconRes);
+        if (cached != null) {
+            return cached;
+        }
+        final Drawable drawable = ContextCompat.getDrawable(host, iconRes);
+        if (drawable == null) {
+            final Icon fallback = Icon.createWithResource(host, iconRes);
+            actionIcons.put(iconRes, fallback);
+            return fallback;
+        }
+        // drawn at 48dp for crisp edges, then measured: the glyph rarely fills its own canvas
+        final int source = Math.max(1, AndroidUtilities.dp(48));
+        final Bitmap sourceBitmap = Bitmap.createBitmap(source, source, Bitmap.Config.ARGB_8888);
+        final Canvas sourceCanvas = new Canvas(sourceBitmap);
+        drawable.setBounds(0, 0, source, source);
+        drawable.draw(sourceCanvas);
+        int left = source, top = source, right = -1, bottom = -1;
+        final int[] row = new int[source];
+        for (int y = 0; y < source; y++) {
+            sourceBitmap.getPixels(row, 0, source, 0, y, source, 1);
+            for (int x = 0; x < source; x++) {
+                if ((row[x] >>> 24) > 8) {
+                    if (x < left) {
+                        left = x;
+                    }
+                    if (x > right) {
+                        right = x;
+                    }
+                    if (top == source) {
+                        top = y;
+                    }
+                    bottom = y;
+                }
+            }
+        }
+        if (right < left) {
+            left = 0;
+            top = 0;
+            right = source - 1;
+            bottom = source - 1;
+        }
+        final int box = Math.max(1, AndroidUtilities.dp(ACTION_ICON_BOX_DP));
+        final Bitmap icon = Bitmap.createBitmap(box, box, Bitmap.Config.ARGB_8888);
+        icon.setDensity(host.getResources().getDisplayMetrics().densityDpi);
+        final Rect src = new Rect(left, top, right + 1, bottom + 1);
+        final float inset = box * (1f - ACTION_ICON_FILL) / 2f;
+        final float scale = Math.min((box - 2 * inset) / src.width(), (box - 2 * inset) / src.height());
+        final float width = src.width() * scale;
+        final float height = src.height() * scale;
+        final float dx = (box - width) / 2f;
+        final float dy = (box - height) / 2f;
+        final Canvas canvas = new Canvas(icon);
+        canvas.drawBitmap(sourceBitmap, src, new RectF(dx, dy, dx + width, dy + height), new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
+        final Icon result = Icon.createWithBitmap(icon);
+        actionIcons.put(iconRes, result);
         return result;
     }
 

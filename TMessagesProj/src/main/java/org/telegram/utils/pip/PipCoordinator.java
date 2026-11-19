@@ -105,31 +105,6 @@ public final class PipCoordinator {
         systemHost.update();
     }
 
-    /**
-     * Leaves system PiP and runs the action once the app is in the foreground again.
-     * System PiP buttons arrive as broadcasts while only the small window is visible, and a
-     * fragment, a dialog or a chooser cannot be started from there: the app is brought back
-     * first and the action runs on the next resume.
-     */
-    void runInApp(@NonNull Runnable action) {
-        if (activityResumed && activity != null && !AndroidUtilities.isInPictureInPictureMode(activity)) {
-            action.run();
-            return;
-        }
-        onResumeActions.add(action);
-        final Activity target = activity;
-        if (target == null) {
-            return;
-        }
-        try {
-            final Intent intent = new Intent(target, target.getClass());
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            ApplicationLoader.applicationContext.startActivity(intent);
-        } catch (Exception e) {
-            FileLog.e(e);
-        }
-    }
-
     void runWhenAppResumed(Runnable action) {
         if (activityResumed && activity != null && !AndroidUtilities.isInPictureInPictureMode(activity)) {
             action.run();

@@ -16,6 +16,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
@@ -32,6 +33,7 @@ import android.widget.ImageView;
 import android.util.TypedValue;
 import android.widget.TextView;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -49,7 +51,10 @@ import org.telegram.messenger.R;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.utils.ViewOutlineProviderImpl;
-import org.telegram.ui.ActionBar.AlertDialog;
+import org.telegram.ui.ActionBar.ActionBarMenuItem;
+import org.telegram.ui.ActionBar.ActionBarMenuSlider;
+import org.telegram.ui.ActionBar.ActionBarMenuSubItem;
+import org.telegram.ui.ActionBar.ActionBarPopupWindow.ActionBarPopupWindowLayout;
 import org.telegram.ui.tablet.TabletDebugLog;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.ActionBar.ThemeBind;
@@ -59,6 +64,7 @@ import org.telegram.ui.Components.LayoutHelper;
 import org.telegram.ui.Components.SeekSpeedDrawable;
 import org.telegram.ui.Components.SimpleFloatPropertyCompat;
 import org.telegram.ui.Components.VideoForwardDrawable;
+import org.telegram.ui.SpeedButtonsLayout;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -103,8 +109,24 @@ final class FloatingHost {
     private @Nullable ImageView shareButton;
     private @Nullable ImageView settingsButton;
     private @Nullable ImageView moreButton;
-    private @Nullable LinearLayout panelView;
+
+    private static final int PANEL_NONE = 0;
+    private static final int PANEL_SETTINGS = 1;
+    private static final int PANEL_MORE = 2;
+
+    /**
+     * The open menu. The viewer opens its menus as a popup dropped below the pressed icon, the
+     * floating window does the same: a window of its own, not a panel drawn into the small window.
+     */
     private int panelKind = PANEL_NONE;
+    private @Nullable PopupWindow popupWindow;
+    /** The same menu drawn inside the window, only when a window of its own cannot be added. */
+    private @Nullable View panelView;
+    private int popupX, popupY;
+
+    // the views of the open settings menu, kept to show the value a change moved to
+    private @Nullable ActionBarMenuSlider.SpeedSlider popupSpeedSlider;
+    private @Nullable SpeedButtonsLayout popupSpeedButtons;
 
     private ScaleGestureDetector scaleGestureDetector;
     private GestureDetectorFixDoubleTap gestureDetector;
@@ -302,6 +324,7 @@ final class FloatingHost {
      * video would come back black. Keep the last frame as a placeholder until the next one.
      */
     void onAppHidden() {
+        hidePanel();
         if (renderTarget == null || placeholderView == null || !renderTarget.isAvailable()) {
             return;
         }
@@ -436,6 +459,7 @@ final class FloatingHost {
     }
 
     private void cancelGestures() {
+        hidePanel();
         if (controlsAnimator != null) {
             controlsAnimator.cancel();
         }
@@ -489,6 +513,7 @@ final class FloatingHost {
     }
 
     private void removeWindow() {
+        hidePanel();
         if (!isWindowAdded) {
             return;
         }
@@ -766,6 +791,7 @@ final class FloatingHost {
 
             @Override
             public boolean onScaleBegin(@NonNull ScaleGestureDetector detector) {
+                hidePanel();
                 if (isScrolling) {
                     isScrolling = false;
                     canLongClick = false;
@@ -904,6 +930,7 @@ final class FloatingHost {
                 if (!isScrolling && controlsAnimator == null && !isScrollDisallowed) {
                     if (Math.abs(distanceX) >= touchSlop || Math.abs(distanceY) >= touchSlop) {
                         isScrolling = true;
+                        hidePanel();
                         pipXSpring.cancel();
                         pipYSpring.cancel();
                         canLongClick = false;
@@ -1075,12 +1102,12 @@ final class FloatingHost {
 
         settingsButton = createActionButton(context, R.drawable.video_settings, padding, buttonSize);
         controlsView.addView(settingsButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin + actionStep, 0));
-        settingsButton.setVisibility(content.canChangeSpeed() || !content.getQualityOptions().isEmpty() ? View.VISIBLE : View.GONE);
-        settingsButton.setOnClickListener(v -> togglePanel(PANEL_SETTINGS));
+        settingsButton.setVisibility(content.canChangeSpeed() || !content.getQualityOptions().isEmpty() || content.canLoop() ? View.VISIBLE : View.GONE);
+        settingsButton.setOnClickListener(v -> togglePanel(PANEL_SETTINGS, settingsButton));
 
         moreButton = createActionButton(context, R.drawable.media_more, padding, buttonSize);
         controlsView.addView(moreButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin, 0));
-        moreButton.setOnClickListener(v -> togglePanel(PANEL_MORE));
+        moreButton.setOnClickListener(v -> togglePanel(PANEL_MORE, moreButton));
 
         final ImageView closeButton = createActionButton(context, R.drawable.pip_video_close, padding, buttonSize);
         controlsView.addView(closeButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.LEFT, margin, margin, 0, 0));
@@ -1129,130 +1156,257 @@ final class FloatingHost {
         return button;
     }
 
-    private static final int PANEL_NONE = 0;
-    private static final int PANEL_SETTINGS = 1;
-    private static final int PANEL_MORE = 2;
-
     /**
-     * Quality, speed and the remaining entries live in a panel inside the window, not in a dialog:
-     * the window is a separate WindowManager window, so a dialog attached to the activity would be
-     * invisible while the window floats over another app.
+     * The viewer opens its menus as a popup below the pressed icon and closes them on an outside
+     * tap. The floating window does the same: the menu is a window of its own, above the small
+     * window, so it is not clipped by it and it behaves like the viewer's.
      */
-    private void togglePanel(int kind) {
-        if (panelView != null && panelKind == kind) {
+    private void togglePanel(int kind, @NonNull View anchor) {
+        if (panelKind == kind) {
             hidePanel();
-        } else {
-            showPanel(kind);
+            return;
         }
+        showPanel(kind, anchor);
     }
 
-    private void showPanel(int kind) {
+    private void showPanel(int kind, @NonNull View anchor) {
         hidePanel();
         final Context context = controlsView.getContext();
-        final LinearLayout panel = new LinearLayout(context);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackgroundColor(0xE6181818);
-        panel.setPadding(dp(12), dp(8), dp(12), dp(8));
-        if (kind == PANEL_MORE) {
-            buildMorePanel(context, panel);
-        } else {
-            buildSettingsPanel(context, panel);
-        }
-        if (panel.getChildCount() == 0) {
+        final ActionBarPopupWindowLayout layout = new ActionBarPopupWindowLayout(context);
+        layout.setBackgroundColor(0xf9222222);
+        final boolean filled = kind == PANEL_MORE
+                ? buildMorePanel(context, layout.linearLayout)
+                : buildSettingsPanel(context, layout.linearLayout);
+        if (!filled) {
             return;
         }
         panelKind = kind;
-        panelView = panel;
-        controlsView.addView(panel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
-        showControlsTemporarily(4000);
+        if (!showPopup(layout, anchor)) {
+            // an overlay window over another app is not always a parent a popup can be attached
+            // to: the same menu, drawn at the bottom of the window, is better than nothing
+            TabletDebugLog.d("pip", "menu popup failed, panel inside the window kind=" + kind);
+            // a failed popup still holds the layout in its own decor view
+            AndroidUtilities.removeFromParent(layout);
+            panelView = layout;
+            controlsView.addView(layout, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+        }
+        AndroidUtilities.cancelRunOnUIThread(dismissControlsCallback);
+        postedDismissControls = false;
+    }
+
+    private boolean showPopup(@NonNull ActionBarPopupWindowLayout layout, @NonNull View anchor) {
+        final int width = Math.min(dp(260), Math.max(dp(212), AndroidUtilities.displaySize.x - dp(24)));
+        layout.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(AndroidUtilities.displaySize.y, View.MeasureSpec.AT_MOST));
+        final int height = Math.min(layout.getMeasuredHeight(), AndroidUtilities.displaySize.y - dp(48));
+        final PopupWindow window = new PopupWindow(layout, width, height);
+        // a background is what makes an outside tap dismiss it
+        window.setBackgroundDrawable(new ColorDrawable(0));
+        window.setOutsideTouchable(true);
+        window.setClippingEnabled(true);
+        window.setFocusable(false);
+        window.setAnimationStyle(R.style.PopupAnimation);
+        window.setOnDismissListener(this::onPopupDismissed);
+
+        // placed in the floating window's own coordinates (the space a popup child window uses),
+        // the screen position is only needed to keep it on screen
+        final int[] windowLocation = new int[2];
+        contentView.getLocationOnScreen(windowLocation);
+        final int[] anchorLocation = new int[2];
+        anchor.getLocationInWindow(anchorLocation);
+        int screenX = windowLocation[0] + anchorLocation[0] + anchor.getWidth() - width;
+        int screenY = windowLocation[1] + anchorLocation[1] + anchor.getHeight() + dp(4);
+        if (screenY + height > AndroidUtilities.displaySize.y - dp(8)) {
+            // no room below: above the button, as the viewer does when it is near the bottom
+            screenY = windowLocation[1] + anchorLocation[1] - height - dp(4);
+        }
+        screenX = Math.max(dp(8), Math.min(screenX, AndroidUtilities.displaySize.x - width - dp(8)));
+        screenY = Math.max(dp(8), Math.min(screenY, AndroidUtilities.displaySize.y - height - dp(8)));
+        popupX = screenX - windowLocation[0];
+        popupY = screenY - windowLocation[1];
+        try {
+            window.showAtLocation(anchor, Gravity.TOP | Gravity.START, popupX, popupY);
+        } catch (Exception e) {
+            FileLog.e(e);
+            return false;
+        }
+        popupWindow = window;
+        checkPopupPosition(window, screenX, screenY);
+        return true;
+    }
+
+    /**
+     * A popup child window is positioned either in the floating window's coordinates or, on some
+     * builds, in the activity window's: one check after it is laid out puts it where it belongs.
+     */
+    private void checkPopupPosition(@NonNull PopupWindow window, int expectedScreenX, int expectedScreenY) {
+        final View content = window.getContentView();
+        content.post(() -> {
+            if (popupWindow != window) {
+                return;
+            }
+            final int[] location = new int[2];
+            content.getLocationOnScreen(location);
+            final int dx = location[0] - expectedScreenX;
+            final int dy = location[1] - expectedScreenY;
+            if (dx == 0 && dy == 0) {
+                return;
+            }
+            popupX -= dx;
+            popupY -= dy;
+            try {
+                window.update(popupX, popupY, window.getWidth(), window.getHeight());
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        });
+    }
+
+    private void onPopupDismissed() {
+        if (popupWindow == null) {
+            // our own hidePanel removed it
+            return;
+        }
+        clearPanelState();
+        // the controls stay up while the menu is open, the timer starts again when it closes
+        AndroidUtilities.cancelRunOnUIThread(dismissControlsCallback);
+        postedDismissControls = true;
+        AndroidUtilities.runOnUIThread(dismissControlsCallback, 2500);
     }
 
     private void hidePanel() {
+        final PopupWindow window = popupWindow;
+        clearPanelState();
+        if (window != null) {
+            try {
+                window.dismiss();
+            } catch (Exception e) {
+                FileLog.e(e);
+            }
+        }
         if (panelView != null) {
-            controlsView.removeView(panelView);
+            AndroidUtilities.removeFromParent(panelView);
             panelView = null;
         }
-        panelKind = PANEL_NONE;
     }
 
-    /** Quality and speed: the same two groups the viewer video settings popup has. */
-    private void buildSettingsPanel(Context context, LinearLayout panel) {
+    private void clearPanelState() {
+        popupWindow = null;
+        panelKind = PANEL_NONE;
+        popupSpeedSlider = null;
+        popupSpeedButtons = null;
+    }
+
+    /** The viewer's video settings popup: the speed slider, the presets or the qualities, and loop. */
+    private boolean buildSettingsPanel(Context context, LinearLayout column) {
+        boolean any = false;
+        if (content.canChangeSpeed()) {
+            final ActionBarMenuSlider.SpeedSlider slider = new ActionBarMenuSlider.SpeedSlider(context, null);
+            slider.setStops(new float[]{0.5f, 1.0f, 1.5f, 2.0f, 2.5f});
+            slider.setMinimumWidth(dp(196));
+            slider.setDrawShadow(false);
+            slider.setBackgroundColor(0xff222222);
+            slider.setTextColor(0xffffffff);
+            slider.setLabel(LocaleController.getString(R.string.VideoPlayerSpeed));
+            slider.setOnValueChange((value, isFinal) -> content.setPlaybackSpeed(
+                    ActionBarMenuSlider.SpeedSlider.MIN_SPEED
+                            + (ActionBarMenuSlider.SpeedSlider.MAX_SPEED - ActionBarMenuSlider.SpeedSlider.MIN_SPEED) * value));
+            slider.setSpeed(content.getPlaybackSpeed(), false);
+            column.addView(slider, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44));
+            popupSpeedSlider = slider;
+            any = true;
+        }
 
         final java.util.List<CharSequence> qualities = content.getQualityOptions();
-        if (!qualities.isEmpty()) {
+        if (qualities.size() > 1) {
+            // more than "auto": the viewer lists the qualities here instead of the presets
+            addPanelGap(context, column);
             final TextView header = new TextView(context);
             header.setText(LocaleController.getString(R.string.QualityList));
-            header.setTextColor(0xFFFFFFFF);
-            header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
             header.setTypeface(AndroidUtilities.bold());
-            panel.addView(header, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            header.setPadding(dp(16), dp(9), dp(16), dp(8));
+            header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+            header.setTextColor(0xFFFFFFFF);
+            column.addView(header, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
             final int selected = content.getSelectedQualityIndex();
             for (int i = 0; i < qualities.size(); i++) {
                 final int index = i;
-                final TextView row = new TextView(context);
-                row.setText(qualities.get(i));
-                row.setTextColor(i == selected ? 0xFF54C7FF : 0xFFFFFFFF);
-                row.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-                row.setPadding(dp(4), dp(6), dp(4), dp(6));
-                row.setOnClickListener(v -> {
+                final ActionBarMenuSubItem item = ActionBarMenuItem.addItem(column, 0, qualities.get(i), true, null);
+                item.setChecked(i == selected);
+                item.setColors(0xfffafafa, 0xfffafafa);
+                item.setSelectorColor(0x0fffffff);
+                item.setOnClickListener(view -> {
+                    // the viewer closes the settings popup on a choice
+                    hidePanel();
                     content.selectQuality(index);
-                    showPanel(PANEL_SETTINGS);
                 });
-                panel.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
             }
+            any = true;
+        } else if (content.canChangeSpeed()) {
+            addPanelGap(context, column);
+            final SpeedButtonsLayout buttons = new SpeedButtonsLayout(context, (speed, isFinal, closeMenu) -> {
+                content.setPlaybackSpeed(speed);
+                updateSpeedControls();
+            });
+            buttons.update(content.getPlaybackSpeed(), true);
+            column.addView(buttons, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            popupSpeedButtons = buttons;
+            any = true;
         }
 
-        if (content.canChangeSpeed()) {
-            final TextView header = new TextView(context);
-            header.setText(LocaleController.getString(R.string.VideoPlayerSpeed));
-            header.setTextColor(0xFFFFFFFF);
-            header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
-            header.setTypeface(AndroidUtilities.bold());
-            header.setPadding(0, dp(6), 0, 0);
-            panel.addView(header, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        if (content.canLoop()) {
+            addPanelGap(context, column);
+            final ActionBarMenuSubItem item = ActionBarMenuItem.addItem(column, R.drawable.menu_video_loop,
+                    LocaleController.getString(R.string.VideoPlayerLoop), true, null);
+            item.setChecked(content.isLooping());
+            item.setColors(0xfffafafa, 0xfffafafa);
+            item.setSelectorColor(0x0fffffff);
+            item.setOnClickListener(view -> {
+                final boolean looping = !content.isLooping();
+                content.setLooping(looping);
+                item.setChecked(looping);
+            });
+            any = true;
+        }
+        return any;
+    }
 
-            final LinearLayout speedRow = new LinearLayout(context);
-            speedRow.setOrientation(LinearLayout.HORIZONTAL);
-            final float[] speeds = {0.5f, 1f, 1.5f, 2f};
-            final float current = content.getPlaybackSpeed();
-            for (float speed : speeds) {
-                final TextView chip = new TextView(context);
-                chip.setText(speed == 1f ? "1x" : (speed == 0.5f ? "0.5x" : (speed == 1.5f ? "1.5x" : "2x")));
-                chip.setTextColor(Math.abs(speed - current) < 0.01f ? 0xFF54C7FF : 0xFFFFFFFF);
-                chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-                chip.setPadding(dp(10), dp(4), dp(10), dp(4));
-                chip.setOnClickListener(v -> {
-                    content.setPlaybackSpeed(speed);
-                    showPanel(PANEL_SETTINGS);
-                });
-                speedRow.addView(chip, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 0));
-            }
-            panel.addView(speedRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+    private void updateSpeedControls() {
+        final float speed = content.getPlaybackSpeed();
+        if (popupSpeedSlider != null) {
+            popupSpeedSlider.setSpeed(speed, true);
+        }
+        if (popupSpeedButtons != null) {
+            popupSpeedButtons.update(speed, true);
         }
     }
 
-    /** The entries that have no icon of their own in the row: show in chat, forward, close. */
-    private void buildMorePanel(Context context, LinearLayout panel) {
+    /** The entries that have no icon in the row: show in chat, forward, close. */
+    private boolean buildMorePanel(Context context, LinearLayout column) {
         if (content.canShowInChat()) {
-            addPanelRow(context, panel, LocaleController.getString(R.string.ShowInChat), () -> content.showInChat());
+            addPanelRow(column, R.drawable.msg_message, LocaleController.getString(R.string.ShowInChat), () -> content.showInChat());
         }
         if (content.canShare()) {
-            addPanelRow(context, panel, LocaleController.getString(R.string.ShareFile), () -> content.share());
+            addPanelRow(column, R.drawable.msg_shareout, LocaleController.getString(R.string.ShareFile), () -> content.share());
         }
-        addPanelRow(context, panel, LocaleController.getString(R.string.Close), session::dismiss);
+        addPanelRow(column, R.drawable.msg_close, LocaleController.getString(R.string.Close), session::dismiss);
+        return true;
     }
 
-    private void addPanelRow(Context context, LinearLayout panel, CharSequence text, Runnable action) {
-        final TextView row = new TextView(context);
-        row.setText(text);
-        row.setTextColor(0xFFFFFFFF);
-        row.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
-        row.setPadding(dp(4), dp(8), dp(4), dp(8));
-        row.setOnClickListener(v -> {
+    private void addPanelRow(LinearLayout column, int icon, CharSequence text, Runnable action) {
+        final ActionBarMenuSubItem item = ActionBarMenuItem.addItem(column, icon, text, false, null);
+        item.setColors(0xfffafafa, 0xfffafafa);
+        item.setSelectorColor(0x0fffffff);
+        item.setOnClickListener(view -> {
             hidePanel();
             action.run();
         });
-        panel.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+    }
+
+    private void addPanelGap(Context context, LinearLayout column) {
+        final View gap = new View(context);
+        gap.setBackgroundColor(0xff181818);
+        column.addView(gap, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 8));
     }
 
     private final class VideoProgressView extends View {
