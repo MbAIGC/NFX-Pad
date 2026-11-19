@@ -1062,35 +1062,25 @@ final class FloatingHost {
         final int margin = 4;
         final int buttonSize = 38;
 
-        final ImageView closeButton = new ImageView(context);
-        closeButton.setImageResource(R.drawable.pip_video_close);
-        ThemeBind.colorFilter(closeButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
-        ThemeBind.selectorBackground(closeButton, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
-        closeButton.setPadding(padding, padding, padding, padding);
-        closeButton.setOnClickListener(v -> session.dismiss());
-        controlsView.addView(closeButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin, 0));
-
-        final ImageView expandButton = new ImageView(context);
-        expandButton.setImageResource(R.drawable.pip_video_expand);
-        ThemeBind.colorFilter(expandButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
-        ThemeBind.selectorBackground(expandButton, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
-        expandButton.setPadding(padding, padding, padding, padding);
-        expandButton.setOnClickListener(v -> session.expand());
-        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, buttonSize + margin + 6, 0));
-
-        // Same three entries as the full screen viewer, side by side in the top right corner, so the
-        // floating window does not need a menu for them.
-        final int actionRowTop = margin + (buttonSize + margin + 6) * 2;
+        // All entries share one row in the top right corner, ordered right to left: close, expand,
+        // share, settings, more. Five 38dp buttons need 214dp, which fits the smallest window (484dp).
+        final int rowTop = margin;
         int actionIndex = 0;
+        final ImageView closeButton = createActionButton(context, R.drawable.pip_video_close, padding, margin, buttonSize, rowTop, actionIndex++);
+        closeButton.setOnClickListener(v -> session.dismiss());
+
+        final ImageView expandButton = createActionButton(context, R.drawable.pip_video_expand, padding, margin, buttonSize, rowTop, actionIndex++);
+        expandButton.setOnClickListener(v -> session.expand());
+
         if (content.canShare()) {
-            shareButton = createActionButton(context, R.drawable.msg_shareout, padding, margin, buttonSize, actionRowTop, actionIndex++);
+            shareButton = createActionButton(context, R.drawable.msg_shareout, padding, margin, buttonSize, rowTop, actionIndex++);
             shareButton.setOnClickListener(v -> content.share());
         }
         if (content.canOpenSettings()) {
-            settingsButton = createActionButton(context, R.drawable.msg_settings_old, padding, margin, buttonSize, actionRowTop, actionIndex++);
+            settingsButton = createActionButton(context, R.drawable.msg_settings_old, padding, margin, buttonSize, rowTop, actionIndex++);
             settingsButton.setOnClickListener(v -> togglePanel(true));
         }
-        moreButton = createActionButton(context, R.drawable.ic_ab_other, padding, margin, buttonSize, actionRowTop, actionIndex++);
+        moreButton = createActionButton(context, R.drawable.ic_ab_other, padding, margin, buttonSize, rowTop, actionIndex++);
         moreButton.setOnClickListener(v -> showMoreMenu());
 
         playPauseButton = new ImageView(context);
