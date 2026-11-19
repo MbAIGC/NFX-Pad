@@ -139,6 +139,29 @@ public interface PipContent {
 
     default void openSettings() {}
 
+    /* Playback speed */
+
+    default boolean canChangeSpeed() {
+        return false;
+    }
+
+    default float getPlaybackSpeed() {
+        return 1f;
+    }
+
+    default void setPlaybackSpeed(float speed) {}
+
+    /** Quality options for the in-window panel; empty hides the quality section. */
+    default @NonNull java.util.List<CharSequence> getQualityOptions() {
+        return java.util.Collections.emptyList();
+    }
+
+    default int getSelectedQualityIndex() {
+        return -1;
+    }
+
+    default void selectQuality(int index) {}
+
     /** The floating window offers a "show in chat" entry. */
     default boolean canShowInChat() {
         return false;

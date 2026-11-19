@@ -29,6 +29,9 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.util.TypedValue;
+import android.widget.TextView;
+import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -100,6 +103,7 @@ final class FloatingHost {
     private @Nullable ImageView shareButton;
     private @Nullable ImageView settingsButton;
     private @Nullable ImageView moreButton;
+    private @Nullable LinearLayout panelView;
 
     private ScaleGestureDetector scaleGestureDetector;
     private GestureDetectorFixDoubleTap gestureDetector;
@@ -1084,7 +1088,7 @@ final class FloatingHost {
         }
         if (content.canOpenSettings()) {
             settingsButton = createActionButton(context, R.drawable.msg_settings_old, padding, margin, buttonSize, actionRowTop, actionIndex++);
-            settingsButton.setOnClickListener(v -> content.openSettings());
+            settingsButton.setOnClickListener(v -> togglePanel(true));
         }
         moreButton = createActionButton(context, R.drawable.ic_ab_other, padding, margin, buttonSize, actionRowTop, actionIndex++);
         moreButton.setOnClickListener(v -> showMoreMenu());
@@ -1129,6 +1133,97 @@ final class FloatingHost {
         return button;
     }
 
+    /**
+     * Quality and speed live in a panel inside the window, not in a dialog: the window is a separate
+     * WindowManager window while the app is in the background, so a dialog attached to the activity would
+     * be invisible there.
+     */
+    private void togglePanel(boolean show) {
+        if (!show) {
+            if (panelView != null) {
+                controlsView.removeView(panelView);
+                panelView = null;
+            }
+            return;
+        }
+        if (panelView != null) {
+            return;
+        }
+        final Context context = controlsView.getContext();
+        final LinearLayout panel = new LinearLayout(context);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(0xE6181818);
+        panel.setPadding(dp(12), dp(8), dp(12), dp(8));
+
+        final java.util.List<CharSequence> qualities = content.getQualityOptions();
+        if (!qualities.isEmpty()) {
+            final TextView header = new TextView(context);
+            header.setText(LocaleController.getString(R.string.QualityList));
+            header.setTextColor(0xFFFFFFFF);
+            header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            header.setTypeface(AndroidUtilities.bold());
+            panel.addView(header, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            final int selected = content.getSelectedQualityIndex();
+            for (int i = 0; i < qualities.size(); i++) {
+                final int index = i;
+                final TextView row = new TextView(context);
+                row.setText(qualities.get(i));
+                row.setTextColor(i == selected ? 0xFF54C7FF : 0xFFFFFFFF);
+                row.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+                row.setPadding(dp(4), dp(6), dp(4), dp(6));
+                row.setOnClickListener(v -> {
+                    content.selectQuality(index);
+                    togglePanel(false);
+                    togglePanel(true);
+                });
+                panel.addView(row, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+            }
+        }
+
+        if (content.canChangeSpeed()) {
+            final TextView header = new TextView(context);
+            header.setText(LocaleController.getString(R.string.VideoPlayerSpeed));
+            header.setTextColor(0xFFFFFFFF);
+            header.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+            header.setTypeface(AndroidUtilities.bold());
+            header.setPadding(0, dp(6), 0, 0);
+            panel.addView(header, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+
+            final LinearLayout speedRow = new LinearLayout(context);
+            speedRow.setOrientation(LinearLayout.HORIZONTAL);
+            final float[] speeds = {0.5f, 1f, 1.5f, 2f};
+            final float current = content.getPlaybackSpeed();
+            for (float speed : speeds) {
+                final TextView chip = new TextView(context);
+                chip.setText(speed == 1f ? "1x" : (speed == 0.5f ? "0.5x" : (speed == 1.5f ? "1.5x" : "2x")));
+                chip.setTextColor(Math.abs(speed - current) < 0.01f ? 0xFF54C7FF : 0xFFFFFFFF);
+                chip.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+                chip.setPadding(dp(10), dp(4), dp(10), dp(4));
+                chip.setOnClickListener(v -> {
+                    content.setPlaybackSpeed(speed);
+                    togglePanel(false);
+                    togglePanel(true);
+                });
+                speedRow.addView(chip, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, 0, 4, 0, 0));
+            }
+            panel.addView(speedRow, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+
+        if (content.canShowInChat()) {
+            final TextView showInChat = new TextView(context);
+            showInChat.setText(LocaleController.getString(R.string.ShowInChat));
+            showInChat.setTextColor(0xFFFFFFFF);
+            showInChat.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 13);
+            showInChat.setPadding(dp(4), dp(8), dp(4), dp(8));
+            showInChat.setOnClickListener(v -> content.showInChat());
+            panel.addView(showInChat, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+
+        panelView = panel;
+        controlsView.addView(panel, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT, Gravity.BOTTOM));
+        showControlsTemporarily(4000);
+    }
+
     /** Share / settings for the floating window: one entry point so the corner does not fill up. */
     private void showMoreMenu() {
         TabletDebugLog.d("pip", "more menu opened");
@@ -1144,10 +1239,6 @@ final class FloatingHost {
         if (content.canShare()) {
             labels.add(LocaleController.getString(R.string.ShareFile));
             ids.add(1);
-        }
-        if (content.canOpenSettings()) {
-            labels.add(LocaleController.getString(R.string.Settings));
-            ids.add(2);
         }
         if (labels.isEmpty()) {
             return;
@@ -1206,10 +1297,10 @@ final class FloatingHost {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     TabletDebugLog.d("pip", "progress touch down y=" + event.getY() + " h=" + getHeight()
-                            + " band=" + (getHeight() - dp(24)));
+                            + " band=" + (getHeight() - dp(48)));
                     // only the band around the drawn line takes the drag: above it stays with the buttons
                     // and with the window drag gesture
-                    if (event.getY() < getHeight() - dp(24)) {
+                    if (event.getY() < getHeight() - dp(48)) {
                         return false;
                     }
                     seeking = true;

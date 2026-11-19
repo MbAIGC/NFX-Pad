@@ -61,6 +61,7 @@ public final class TabletDebugLog {
     public static final boolean AREA_MEDIA = true;
     public static final boolean AREA_LIFE = true;
     public static final boolean AREA_PIP = true;
+    public static final boolean AREA_SCROLL = true;
 
     private static final SimpleDateFormat TIME = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
     private static boolean headerWritten;
@@ -109,6 +110,7 @@ public final class TabletDebugLog {
             case "media" -> AREA_MEDIA;
             case "life" -> AREA_LIFE;
             case "pip" -> AREA_PIP;
+            case "scroll" -> AREA_SCROLL;
             default -> false;
         };
     }

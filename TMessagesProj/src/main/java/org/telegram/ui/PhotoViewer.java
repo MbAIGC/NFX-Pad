@@ -24254,6 +24254,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         return out;
     }
 
+    private static final int ACTION_PIP_SPEED = 1;
+    private static final int ACTION_PIP_BACK = 2;
+    private static final int ACTION_PIP_FORWARD = 3;
+
     private final PipContent pipContent = new PipContent() {
         private boolean isEmbed() {
             return isEmbedVideo && photoViewerWebView != null;
@@ -24288,6 +24292,116 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             messages.add(currentMessageObject);
             // same path as the viewer menu entry: pick a chat and forward, which also leaves PiP
             showForward(messages, false);
+        }
+
+        @Override
+        public boolean canChangeSpeed() {
+            return videoPlayer != null || photoViewerWebView != null;
+        }
+
+        @Override
+        public float getPlaybackSpeed() {
+            return currentVideoSpeed;
+        }
+
+        @Override
+        public void setPlaybackSpeed(float speed) {
+            // same entry point as the viewer speed slider: it updates the player and remembers the value
+            chooseSpeed(speed, true, false);
+        }
+
+        @Override
+        public @NonNull java.util.List<CharSequence> getQualityOptions() {
+            final java.util.ArrayList<CharSequence> result = new java.util.ArrayList<>();
+            if (videoPlayer == null) {
+                return result;
+            }
+            result.add(getString(R.string.QualityAuto));
+            for (int i = 0; i < videoPlayer.getQualitiesCount(); i++) {
+                final VideoPlayer.Quality q = videoPlayer.getQuality(i);
+                if (q == null) {
+                    continue;
+                }
+                if (q.original) {
+                    result.add(getString(R.string.QualityOriginal));
+                } else if (q.p() >= 2000) {
+                    result.add(getString(R.string.Quality2160));
+                } else if (q.p() >= 1400) {
+                    result.add(getString(R.string.Quality1440));
+                } else if (q.p() >= 1000) {
+                    result.add(getString(R.string.Quality1080));
+                } else if (q.p() >= 700) {
+                    result.add(getString(R.string.Quality720));
+                } else if (q.p() >= 400) {
+                    result.add(getString(R.string.Quality480));
+                } else {
+                    result.add(getString(R.string.Quality360));
+                }
+            }
+            return result;
+        }
+
+        @Override
+        public int getSelectedQualityIndex() {
+            if (videoPlayer == null) {
+                return -1;
+            }
+            // +1 because index 0 is the "auto" row
+            return videoPlayer.getSelectedQuality() == VideoPlayer.QUALITY_AUTO ? 0 : videoPlayer.getSelectedQuality() + 1;
+        }
+
+        @Override
+        public void getSystemActions(@NonNull java.util.List<org.telegram.utils.pip.PipAction> out, int maxActions) {
+            // Only icon buttons are possible in system PiP, so the speed entry cycles instead of opening a menu.
+            // Order matters: the system keeps at most maxActions, and the most useful ones go first.
+            final java.util.ArrayList<org.telegram.utils.pip.PipAction> actions = new java.util.ArrayList<>();
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SPEED, R.drawable.msg_speed_normal,
+                    getString(R.string.VideoPlayerSpeed) + " " + currentVideoSpeed + "x", videoPlayer != null));
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_BACK, R.drawable.nfxp_rewind_10,
+                    "-10s", videoPlayer != null));
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_FORWARD, R.drawable.nfxp_forward_10,
+                    "+10s", videoPlayer != null));
+            for (int i = 0; i < actions.size() && out.size() < maxActions; i++) {
+                out.add(actions.get(i));
+            }
+        }
+
+        @Override
+        public void onSystemAction(int actionId) {
+            if (videoPlayer == null) {
+                return;
+            }
+            if (actionId == ACTION_PIP_SPEED) {
+                // cycle 1x -> 1.5x -> 2x -> 0.5x -> 1x
+                final float next;
+                if (currentVideoSpeed < 1f) {
+                    next = 1f;
+                } else if (currentVideoSpeed < 1.5f) {
+                    next = 1.5f;
+                } else if (currentVideoSpeed < 2f) {
+                    next = 2f;
+                } else {
+                    next = 0.5f;
+                }
+                chooseSpeed(next, true, false);
+            } else if (actionId == ACTION_PIP_BACK || actionId == ACTION_PIP_FORWARD) {
+                final long total = videoPlayer.getDuration();
+                final long current = videoPlayer.getCurrentPosition();
+                if (total <= 0) {
+                    return;
+                }
+                final long delta = 10_000L;
+                final long target = Math.max(0, Math.min(total, current + (actionId == ACTION_PIP_FORWARD ? delta : -delta)));
+                videoPlayer.seekTo(target);
+            }
+        }
+
+        @Override
+        public void selectQuality(int index) {
+            if (videoPlayer == null || index < 0) {
+                return;
+            }
+            chooseQuality(index == 0 ? VideoPlayer.QUALITY_AUTO : index - 1);
         }
 
         @Override

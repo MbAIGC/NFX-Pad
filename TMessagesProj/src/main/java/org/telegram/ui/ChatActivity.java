@@ -14808,6 +14808,25 @@ public class ChatActivity extends BaseFragment implements
      * Only record visibility transitions that have something to do with a search session. Every chat that
      * is opened would otherwise add two lines, and the exported file would be unreadable.
      */
+    /**
+     * Shape of the current scroll state: positions and offsets only. No message ids and no text, so the line
+     * can be pasted into a report without exposing what the user is reading.
+     */
+    private String scrollStateForLog() {
+        if (chatListView == null || chatLayoutManager == null) {
+            return "noList";
+        }
+        final int first = chatLayoutManager.findFirstVisibleItemPosition();
+        final int last = chatLayoutManager.findLastVisibleItemPosition();
+        final View firstChild = first >= 0 ? chatLayoutManager.findViewByPosition(first) : null;
+        final int top = firstChild != null ? firstChild.getTop() : 0;
+        return "first=" + first + " last=" + last + " top=" + top
+                + " count=" + chatAdapter.getItemCount()
+                + " atBottom=" + (!chatListView.canScrollVertically(1))
+                + " paused=" + paused
+                + " firstLoading=" + firstLoading;
+    }
+
     private boolean isSearchDiagnosticsRelevant() {
         return searching
                 || searchingHashtag != null
@@ -17857,6 +17876,8 @@ public class ChatActivity extends BaseFragment implements
     }
 
     private void moveScrollToLastMessage(boolean skipSponsored) {
+        TabletDebugLog.d("scroll", "moveScrollToLastMessage skipSponsored=" + skipSponsored
+                + " from " + scrollStateForLog());
         if (chatListView != null && !messages.isEmpty() && !pinchToZoomHelper.isInOverlayMode()) {
             int position = 0;
             if (skipSponsored) {
@@ -18140,6 +18161,7 @@ public class ChatActivity extends BaseFragment implements
                             if (checkTextureViewPosition || PipRoundVideoView.getInstance() != null) {
                                 MediaController.getInstance().setCurrentVideoVisible(false);
                             } else if (needScroll) {
+                                TabletDebugLog.d("scroll", "updateTextureViewPosition scrolls to playing message, before " + scrollStateForLog());
                                 // A feed row can be the playing message outside the feed host; scroll to
                                 // the id that this host actually renders for the same post.
                                 scrollToMessageId(FeedMessageUtils.getPlaybackScrollMessageId(isFeedSearch(), dialog_id, messageObject), 0, false, 0, true, 0);
@@ -19223,6 +19245,8 @@ public class ChatActivity extends BaseFragment implements
             return;
         }
 
+        TabletDebugLog.d("scroll", "scrollToMessageId forceScroll=" + forceScroll
+                + " from=" + (fromMessageId != 0) + " before " + scrollStateForLog());
         forceNextPinnedMessageId = Math.abs(forcePinnedMessageId);
         forceScrollToFirst = forcePinnedMessageId > 0;
         wasManualScroll = true;
@@ -33058,6 +33082,7 @@ public class ChatActivity extends BaseFragment implements
     @Override
     public void onResume() {
         super.onResume();
+        TabletDebugLog.d("scroll", "chat resume(before) " + scrollStateForLog());
         TabletDebugLog.d("life", "chat resume viewAttached="
                 + (fragmentView != null && fragmentView.getParent() != null)
                 + " viewNull=" + (fragmentView == null)
@@ -33219,6 +33244,8 @@ public class ChatActivity extends BaseFragment implements
         if (starReactionsOverlay != null) {
             starReactionsOverlay.bringToFront();
         }
+        // after the resume work: if this differs from the "(before)" line, onResume itself moved the list
+        TabletDebugLog.d("scroll", "chat resume(after)  " + scrollStateForLog());
     }
 
     public float getPullingDownOffset() {
@@ -33284,6 +33311,7 @@ public class ChatActivity extends BaseFragment implements
 
     @Override
     public void onPause() {
+        TabletDebugLog.d("scroll", "chat pause  " + scrollStateForLog());
         super.onPause();
         scrolling = false;
         if (scrimPopupWindow != null) {
