@@ -10454,9 +10454,38 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             reasonsToHideDecorView += (increment ? 1 : -1);
         }
         if (frameLayout != null) {
-            frameLayout.setVisibility(reasonsToHideMainContent > 0 ? View.GONE : View.VISIBLE);
+            final int target = reasonsToHideMainContent > 0 ? View.GONE : View.VISIBLE;
+            final boolean changed = frameLayout.getVisibility() != target;
+            final String what = target == View.GONE ? "hide" : "show";
+            if (changed) {
+                TabletDebugLog.d("scroll", "content " + what + "(before) reasons=" + reasonsToHideMainContent + " " + visibleChatShapeForLog());
+            }
+            frameLayout.setVisibility(target);
+            if (changed) {
+                TabletDebugLog.d("scroll", "content " + what + "(after)  reasons=" + reasonsToHideMainContent + " " + visibleChatShapeForLog());
+            }
         }
         checkDecorViewVisibility();
+    }
+
+    /**
+     * Geometry of the message list on screen, whichever pane holds it. Child counts and offsets only, so the
+     * line is safe to export. This is the anchor a layout manager needs; if it is already gone here, the
+     * jump to the newest message happened while the content was hidden, not when it came back.
+     */
+    private String visibleChatShapeForLog() {
+        ChatActivity chat = null;
+        if (rightActionBarLayout != null) {
+            chat = asChat(rightActionBarLayout.getLastFragment());
+        }
+        if (chat == null && actionBarLayout != null) {
+            chat = asChat(actionBarLayout.getLastFragment());
+        }
+        return chat != null ? chat.chatListShapeForLog() : "children=noChat";
+    }
+
+    private static ChatActivity asChat(BaseFragment fragment) {
+        return fragment instanceof ChatActivity ? (ChatActivity) fragment : null;
     }
 
     private void checkDecorViewVisibility() {

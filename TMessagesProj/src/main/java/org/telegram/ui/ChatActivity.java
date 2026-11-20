@@ -635,6 +635,8 @@ public class ChatActivity extends BaseFragment implements
     public ChatListRecyclerView chatListView;
     private ChatListItemAnimator chatListItemAnimator;
     private GridLayoutManagerFixed chatLayoutManager;
+    /** Only used to emit one diagnostic line when the list layout pass comes up without any child. */
+    private boolean listLayoutWasEmpty;
     public ChatActivityAdapter chatAdapter;
     private UnreadCounterTextView bottomOverlayChatText;
     private boolean bottomOverlayLinks;
@@ -7619,6 +7621,9 @@ public class ChatActivity extends BaseFragment implements
             }
         });
         chatListView.setLayoutManager(chatLayoutManager);
+        // one line only when a layout pass comes up empty or refills: see onChatListViewLaidOut()
+        chatListView.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                onChatListViewLaidOut());
         chatListView.addItemDecoration(new RecyclerView.ItemDecoration() {
             @Override
             public void getItemOffsets(Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
@@ -14822,9 +14827,43 @@ public class ChatActivity extends BaseFragment implements
         final int top = firstChild != null ? firstChild.getTop() : 0;
         return "first=" + first + " last=" + last + " top=" + top
                 + " count=" + chatAdapter.getItemCount()
-                + " atBottom=" + (!chatListView.canScrollVertically(1))
+                + " atBottom=" + (first != -1 && !chatListView.canScrollVertically(1))
                 + " paused=" + paused
                 + " firstLoading=" + firstLoading;
+    }
+
+    /**
+     * Geometry of the message list only: child count, positions and offsets. No message ids, no peer ids
+     * and no text, so the line can sit in an exported file without revealing what is on screen.
+     */
+    public String chatListShapeForLog() {
+        if (chatListView == null || chatLayoutManager == null) {
+            return "children=none";
+        }
+        final int first = chatLayoutManager.findFirstVisibleItemPosition();
+        final View firstChild = first >= 0 ? chatLayoutManager.findViewByPosition(first) : null;
+        return "children=" + chatListView.getChildCount()
+                + " first=" + first
+                + " top=" + (firstChild != null ? firstChild.getTop() : 0)
+                + " h=" + chatListView.getHeight()
+                + " shown=" + chatListView.isShown();
+    }
+
+    /**
+     * Records the layout pass that finds the list without any child, and the pass that refills it. That is
+     * the exact state in which the layout manager has no anchor and falls back to adapter position 0,
+     * which is the newest message because the chat list is reversed. Every other layout pass stays silent.
+     */
+    private void onChatListViewLaidOut() {
+        if (chatListView == null || chatLayoutManager == null) {
+            return;
+        }
+        final boolean empty = chatListView.getChildCount() == 0;
+        if (empty == listLayoutWasEmpty) {
+            return;
+        }
+        listLayoutWasEmpty = empty;
+        TabletDebugLog.d("scroll", (empty ? "list layout empty " : "list layout refilled ") + chatListShapeForLog());
     }
 
     private boolean isSearchDiagnosticsRelevant() {
@@ -33195,6 +33234,8 @@ public class ChatActivity extends BaseFragment implements
         if (wasPaused) {
             wasPaused = false;
             if (chatAdapter != null) {
+                // this refresh throws away the adapter's idea of where it is; say where that happened
+                TabletDebugLog.d("scroll", "chat adapter refresh " + scrollStateForLog());
                 chatAdapter.notifyDataSetChanged(false);
             }
         }
@@ -33246,6 +33287,15 @@ public class ChatActivity extends BaseFragment implements
         }
         // after the resume work: if this differs from the "(before)" line, onResume itself moved the list
         TabletDebugLog.d("scroll", "chat resume(after)  " + scrollStateForLog());
+        // one frame later: the first layout pass after coming back. If the anchor is already lost here, it was
+        // lost before onResume ran (the PiP hide or an update that arrived while the content was hidden).
+        if (chatListView != null) {
+            chatListView.post(() -> {
+                if (chatListView != null && chatListView.isAttachedToWindow()) {
+                    TabletDebugLog.d("scroll", "chat resume(laid)   " + scrollStateForLog() + " " + chatListShapeForLog());
+                }
+            });
+        }
     }
 
     public float getPullingDownOffset() {
