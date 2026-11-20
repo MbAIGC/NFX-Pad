@@ -8737,6 +8737,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
     }
 
     private void showForward(ArrayList<MessageObject> fmessages, boolean noQuote) {
+        final DialogsActivity fragment = buildForwardDialog(fmessages, noQuote);
+        closePhoto(false, false);
+        ((LaunchActivity) parentActivity).presentFragment(fragment, false, true);
+    }
+
+    /** The chat picker a share opens; the caller decides what happens to the viewer around it. */
+    private DialogsActivity buildForwardDialog(ArrayList<MessageObject> fmessages, boolean noQuote) {
         Bundle args = new Bundle();
         args.putBoolean("onlySelect", true);
         args.putInt("dialogsType", 3);
@@ -8786,8 +8793,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
             return true;
         });
-        closePhoto(false, false);
-        ((LaunchActivity) parentActivity).presentFragment(fragment, false, true);
+        return fragment;
     }
 
     public static String getTempFileAbsolutePath() {
@@ -24270,7 +24276,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             return R.drawable.msg_speed_0_2;
         } else if (speed < 0.75f) {
             return R.drawable.msg_speed_slow;
-        } else if (speed < 1.25f) {
+        } else if (speed < 1.05f) {
             return R.drawable.msg_speed_normal;
         } else if (speed < 1.75f) {
             return R.drawable.msg_speed_fast;
@@ -24278,12 +24284,37 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         return R.drawable.msg_speed_superfast;
     }
 
+    /**
+     * The values the system PiP speed entry steps through, in this order, and 1x last so the step
+     * after 2x is the normal speed again: the entry has a single button and no long press, so a way
+     * back to 1x has to be one tap away at the top of the range.
+     */
+    private static final float[] PIP_SPEED_STEPS = {1.1f, 1.2f, 1.25f, 1.5f, 1.8f, 2.0f, 1.0f};
+
+    private static float nextPipSpeed(float current) {
+        // on a stop: the next one in the ring, which is how 2x reaches 1x
+        for (int i = 0; i < PIP_SPEED_STEPS.length; i++) {
+            if (Math.abs(current - PIP_SPEED_STEPS[i]) < 0.001f) {
+                return PIP_SPEED_STEPS[(i + 1) % PIP_SPEED_STEPS.length];
+            }
+        }
+        // a value the viewer slider produced: the first stop above it, else the start of the ring
+        for (int i = 0; i < PIP_SPEED_STEPS.length; i++) {
+            if (current < PIP_SPEED_STEPS[i] - 0.001f) {
+                return PIP_SPEED_STEPS[i];
+            }
+        }
+        return PIP_SPEED_STEPS[0];
+    }
+
     /** The speed value as the viewer shows it: "1x", "1.5x". */
     private static String formatVideoSpeed(float speed) {
         if (Math.abs(speed - Math.round(speed)) < 0.01f) {
             return Math.round(speed) + "x";
         }
-        return String.format(Locale.US, "%.1fx", speed);
+        // up to two decimals, trailing zero dropped: 1.1x, 1.25x, 1.8x
+        final String two = String.format(Locale.US, "%.2f", speed);
+        return (two.endsWith("0") ? two.substring(0, two.length() - 1) : two) + "x";
     }
 
     private final PipContent pipContent = new PipContent() {
@@ -24318,8 +24349,17 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
             final ArrayList<MessageObject> messages = new ArrayList<>();
             messages.add(currentMessageObject);
-            // same path as the viewer menu entry: pick a chat and forward, which also leaves PiP
-            showForward(messages, false);
+            // Same picker as the viewer menu entry, but the small window has to go first: it is a
+            // window of its own and covers the picker, and the viewer behind it is torn down by the
+            // close path, which left the window on screen with dead buttons and a released player.
+            final LaunchActivity launchActivity = (LaunchActivity) parentActivity;
+            final DialogsActivity fragment = buildForwardDialog(messages, false);
+            final PipSession session = pipSession;
+            if (session != null) {
+                pipSession = null;
+                session.dismiss();
+            }
+            launchActivity.presentFragment(fragment, false, true);
         }
 
         @Override
@@ -24418,9 +24458,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     playing ? R.drawable.pip_pause_large : R.drawable.pip_play_large,
                     getString(playing ? R.string.AccActionPause : R.string.AccActionPlay),
                     hasSystemPlayPause()));
+            // the value is drawn into the button: 1.1x, 1.2x and 1.25x share one glyph, so a
+            // resource icon could not tell them apart and the system draws no title
+            final String speedText = formatVideoSpeed(currentVideoSpeed);
             actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SPEED,
                     speedIconRes(currentVideoSpeed),
-                    getString(R.string.VideoPlayerSpeed) + " " + formatVideoSpeed(currentVideoSpeed),
+                    speedText,
+                    getString(R.string.VideoPlayerSpeed) + " " + speedText,
                     canChangeSpeed()));
             actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_FORWARD, R.drawable.nfxp_forward_10,
                     "+10s", seekable));
@@ -24447,18 +24491,8 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
             final boolean seekable = videoPlayer != null || (photoViewerWebView != null && photoViewerWebView.isControllable());
             if (actionId == ACTION_PIP_SPEED) {
-                // cycle 1x -> 1.5x -> 2x -> 0.5x -> 1x, the params are rebuilt so the title follows
-                final float next;
-                if (currentVideoSpeed < 1f) {
-                    next = 1f;
-                } else if (currentVideoSpeed < 1.5f) {
-                    next = 1.5f;
-                } else if (currentVideoSpeed < 2f) {
-                    next = 2f;
-                } else {
-                    next = 0.5f;
-                }
-                chooseSpeed(next, true, false);
+                // steps through PIP_SPEED_STEPS and wraps; the params are rebuilt so the icon follows
+                chooseSpeed(nextPipSpeed(currentVideoSpeed), true, false);
                 if (pipSession != null) {
                     pipSession.invalidate();
                 }

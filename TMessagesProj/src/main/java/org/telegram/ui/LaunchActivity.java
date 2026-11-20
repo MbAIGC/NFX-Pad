@@ -540,7 +540,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         frameLayout.setClipChildren(false);
         setContentView(frameLayout);
         rootAnimatedInsetsListener = new WindowAnimatedInsetsProvider(frameLayout);
-        PipCoordinator.getInstance().onActivityCreate(this, createActivityVisibilityController(false));
+        PipCoordinator.getInstance().onActivityCreate(this, createPipVisibilityController());
 
         themeSwitchImageView = new ThemeRevealView(this);
         themeSwitchImageView.setVisibility(View.GONE);
@@ -10446,23 +10446,37 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
 
     private int reasonsToHideMainContent = 0;
+    /**
+     * Hides that must keep the content laid out. System PiP uses this: GONE stops measure/layout, the
+     * message list loses every child while it is hidden, and a reversed list without a child anchors at
+     * adapter position 0, which is the newest message - the chat was seen to jump there on return.
+     * INVISIBLE still draws nothing, and the PiP window paints its own black background.
+     */
+    private int reasonsToHideMainContentKeepLayout = 0;
     private int reasonsToHideDecorView = 0;
 
-    private void updateReasonsToHideMainContent(boolean increment, boolean withDecorView) {
-        reasonsToHideMainContent += (increment ? 1 : -1);
+    private void updateReasonsToHideMainContent(boolean increment, boolean withDecorView, boolean keepLayout) {
+        if (keepLayout) {
+            reasonsToHideMainContentKeepLayout += (increment ? 1 : -1);
+        } else {
+            reasonsToHideMainContent += (increment ? 1 : -1);
+        }
         if (withDecorView) {
             reasonsToHideDecorView += (increment ? 1 : -1);
         }
         if (frameLayout != null) {
-            final int target = reasonsToHideMainContent > 0 ? View.GONE : View.VISIBLE;
+            final int target = reasonsToHideMainContent > 0 ? View.GONE
+                    : reasonsToHideMainContentKeepLayout > 0 ? View.INVISIBLE
+                    : View.VISIBLE;
             final boolean changed = frameLayout.getVisibility() != target;
-            final String what = target == View.GONE ? "hide" : "show";
+            final String what = target == View.GONE ? "hide" : target == View.INVISIBLE ? "hide(layout kept)" : "show";
+            final String counts = "reasons=" + reasonsToHideMainContent + " keepLayout=" + reasonsToHideMainContentKeepLayout;
             if (changed) {
-                TabletDebugLog.d("scroll", "content " + what + "(before) reasons=" + reasonsToHideMainContent + " " + visibleChatShapeForLog());
+                TabletDebugLog.d("scroll", "content " + what + "(before) " + counts + " " + visibleChatShapeForLog());
             }
             frameLayout.setVisibility(target);
             if (changed) {
-                TabletDebugLog.d("scroll", "content " + what + "(after)  reasons=" + reasonsToHideMainContent + " " + visibleChatShapeForLog());
+                TabletDebugLog.d("scroll", "content " + what + "(after)  " + counts + " " + visibleChatShapeForLog());
             }
         }
         checkDecorViewVisibility();
@@ -10500,7 +10514,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @NonNull
     private ActivityVisibilityController createActivityVisibilityController(boolean withDecorView) {
-        return new ActivityVisibilityController(this, withDecorView);
+        return new ActivityVisibilityController(this, withDecorView, false);
+    }
+
+    /** For system PiP: the content is hidden but stays laid out, see reasonsToHideMainContentKeepLayout. */
+    @NonNull
+    private ActivityVisibilityController createPipVisibilityController() {
+        return new ActivityVisibilityController(this, false, true);
     }
 
     @Nullable
@@ -10514,12 +10534,14 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     public static class ActivityVisibilityController implements WindowVisibilityManager.Controller {
         private final WeakReference<LaunchActivity> activity;
         private final boolean withDecorView;
+        private final boolean keepLayout;
         private boolean hidden;
         private boolean destroyed;
 
-        private ActivityVisibilityController(LaunchActivity activity, boolean withDecorView) {
+        private ActivityVisibilityController(LaunchActivity activity, boolean withDecorView, boolean keepLayout) {
             this.activity = new WeakReference<>(activity);
             this.withDecorView = withDecorView;
+            this.keepLayout = keepLayout;
         }
 
         @Override
@@ -10528,7 +10550,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 this.hidden = hidden;
                 LaunchActivity activity = this.activity.get();
                 if (activity != null) {
-                    activity.updateReasonsToHideMainContent(hidden, withDecorView);
+                    activity.updateReasonsToHideMainContent(hidden, withDecorView, keepLayout);
                 }
             }
         }

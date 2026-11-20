@@ -68,11 +68,11 @@ final class SystemHost {
      * 24dp canvas keeps padding the glyph cannot use: the app's only lever is what the icon
      * itself paints. Icons are re-rendered one box size up with the glyph filling most of it.
      */
-    private static final int ACTION_ICON_BOX_DP = 26;
-    private static final float ACTION_ICON_FILL = 0.92f;
+    private static final int ACTION_ICON_BOX_DP = 32;
+    private static final float ACTION_ICON_FILL = 1f;
 
-    /** Rendered action icons by resource; the params (and so the actions) are rebuilt often. */
-    private final HashMap<Integer, Icon> actionIcons = new HashMap<>();
+    /** Rendered action icons by key ("r:<res>" or "t:<value>"); the params are rebuilt often. */
+    private final HashMap<String, Icon> actionIcons = new HashMap<>();
 
     SystemHost(PipCoordinator coordinator) {
         this.coordinator = coordinator;
@@ -243,6 +243,9 @@ final class SystemHost {
         for (int i = 0; i < actionsTmp.size(); i++) {
             final PipAction action = actionsTmp.get(i);
             keyBuilder.append('|').append(action.id).append(action.iconRes).append(action.enabled);
+            if (action.iconText != null) {
+                keyBuilder.append('"').append(action.iconText);
+            }
         }
         actionsTmp.clear();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -326,7 +329,10 @@ final class SystemHost {
                 pendingIntent = PendingIntent.getBroadcast(activity, action.id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
                 actionIntents.put(action.id, pendingIntent);
             }
-            final RemoteAction remoteAction = new RemoteAction(actionIcon(activity, action.iconRes), action.title, action.title, pendingIntent);
+            final Icon icon = action.iconText != null
+                    ? actionTextIcon(activity, action.iconText)
+                    : actionIcon(activity, action.iconRes);
+            final RemoteAction remoteAction = new RemoteAction(icon, action.title, action.title, pendingIntent);
             remoteAction.setEnabled(action.enabled);
             result.add(remoteAction);
         }
@@ -346,14 +352,15 @@ final class SystemHost {
     /** The icon of one action, drawn larger than the glyph of the resource as it is. */
     @RequiresApi(api = Build.VERSION_CODES.O)
     private @NonNull Icon actionIcon(@NonNull Activity host, @DrawableRes int iconRes) {
-        final Icon cached = actionIcons.get(iconRes);
+        final String key = "r:" + iconRes;
+        final Icon cached = actionIcons.get(key);
         if (cached != null) {
             return cached;
         }
         final Drawable drawable = ContextCompat.getDrawable(host, iconRes);
         if (drawable == null) {
             final Icon fallback = Icon.createWithResource(host, iconRes);
-            actionIcons.put(iconRes, fallback);
+            actionIcons.put(key, fallback);
             return fallback;
         }
         // drawn at 48dp for crisp edges, then measured: the glyph rarely fills its own canvas
@@ -400,8 +407,52 @@ final class SystemHost {
         final Canvas canvas = new Canvas(icon);
         canvas.drawBitmap(sourceBitmap, src, new RectF(dx, dy, dx + width, dy + height), new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG));
         final Icon result = Icon.createWithBitmap(icon);
-        actionIcons.put(iconRes, result);
+        actionIcons.put(key, result);
         return result;
+    }
+
+    /**
+     * An action whose value is its icon: the value is drawn into the button box, in the same place a
+     * resource glyph would be. The system draws no title, so this is the only way the current
+     * playback speed can be read off the small window.
+     */
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private @NonNull Icon actionTextIcon(@NonNull Activity host, @NonNull CharSequence text) {
+        final String value = text.toString();
+        final String key = "t:" + value;
+        final Icon cached = actionIcons.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        final int box = Math.max(1, AndroidUtilities.dp(ACTION_ICON_BOX_DP));
+        final Bitmap bitmap = Bitmap.createBitmap(box, box, Bitmap.Config.ARGB_8888);
+        bitmap.setDensity(host.getResources().getDisplayMetrics().densityDpi);
+        final Canvas canvas = new Canvas(bitmap);
+        final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setTypeface(AndroidUtilities.bold());
+        paint.setTextAlign(Paint.Align.CENTER);
+        // the longest value the entry can show ("1.25x") decides the size, so every value is legible
+        float size = box * 0.42f;
+        paint.setTextSize(size);
+        final float maxWidth = box * 0.94f;
+        final float width = paint.measureText(value);
+        if (width > maxWidth && width > 0) {
+            size *= maxWidth / width;
+            paint.setTextSize(size);
+        }
+        // a dark outline first: the window shows the video behind the button
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(size * 0.22f);
+        paint.setColor(0xFF000000);
+        final Paint.FontMetrics fm = paint.getFontMetrics();
+        final float y = box / 2f - (fm.ascent + fm.descent) / 2f;
+        canvas.drawText(value, box / 2f, y, paint);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(0xFFFFFFFF);
+        canvas.drawText(value, box / 2f, y, paint);
+        final Icon icon = Icon.createWithBitmap(bitmap);
+        actionIcons.put(key, icon);
+        return icon;
     }
 
     /** Enter system PiP right now, e.g. from a PiP button in the content's own UI. */

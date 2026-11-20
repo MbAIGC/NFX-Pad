@@ -1163,8 +1163,9 @@ final class FloatingHost {
         });
 
         final ImageView expandButton = createActionButton(context, R.drawable.pip_video_expand, padding, buttonSize);
-        // above the progress line: the two no longer sit on top of each other in this corner
-        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.BOTTOM | Gravity.RIGHT, 0, 0, margin, dp(30)));
+        // top left corner, the free one: the three entries take the top right, close the bottom
+        // left, and the progress line runs along the bottom
+        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.TOP | Gravity.LEFT, margin, margin, 0, 0));
         expandButton.setOnClickListener(v -> {
             TabletDebugLog.d("pip", "button expand");
             session.expand();
