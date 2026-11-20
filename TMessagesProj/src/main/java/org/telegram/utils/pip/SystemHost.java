@@ -30,7 +30,6 @@ import androidx.media3.common.Player;
 import androidx.media3.session.MediaSession;
 
 import org.telegram.messenger.AndroidUtilities;
-import org.telegram.ui.tablet.TabletDebugLog;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.utils.WindowVisibilityManager;
 
@@ -90,6 +89,7 @@ final class SystemHost {
     void detach() {
         releaseMediaSession();
         actionIcons.clear();
+        actionIntents.clear();
         if (receiverRegistered && activity != null) {
             receiverRegistered = false;
             try {
@@ -191,13 +191,19 @@ final class SystemHost {
     /** What was set last: the same params are not sent again (the hint is refreshed often). */
     private @Nullable String appliedParamsKey;
 
+    /**
+     * The params are rebuilt every time the content says something changed, which is on every
+     * progress tick. Building them is not free (three icons, three pending intents), so the key is
+     * computed first and the params are only built when the key really changed.
+     */
     @RequiresApi(api = Build.VERSION_CODES.O)
     private void applyParams(@NonNull PipSession session) {
-        final PictureInPictureParams params = buildParams(session);
-        if (paramsKey != null && paramsKey.equals(appliedParamsKey)) {
+        final String key = buildParamsKey(session);
+        if (key.equals(appliedParamsKey)) {
             return;
         }
-        appliedParamsKey = paramsKey;
+        final PictureInPictureParams params = buildParams(session);
+        appliedParamsKey = key;
         AndroidUtilities.setPictureInPictureParams(activity, params);
     }
 
@@ -208,30 +214,63 @@ final class SystemHost {
     private final Rect lastHint = new Rect();
     private boolean lastHintValid;
 
-    /** Key of the params built last by {@link #buildParams}. */
-    private @Nullable String paramsKey;
     private final StringBuilder keyBuilder = new StringBuilder();
 
+    /**
+     * The same inputs {@link #buildParams} uses, in the same order, without building anything: what
+     * decides whether the system has to be told again.
+     */
     @RequiresApi(api = Build.VERSION_CODES.O)
-    private PictureInPictureParams buildParams(@NonNull PipSession session) {
-        TabletDebugLog.d("pip", "system pip params content=" + session.content.getClass().getSimpleName()
-                + " state=" + session.state);
-        final PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
+    private String buildParamsKey(@NonNull PipSession session) {
         keyBuilder.setLength(0);
         final int width = session.content.getContentWidth();
         final int height = session.content.getContentHeight();
         if (width > 0 && height > 0) {
-            final float ratio = width / (float) height;
-            final Rational rational;
-            if (ratio < MIN_RATIO) {
-                rational = new Rational(45, 100);
-            } else if (ratio > MAX_RATIO) {
-                rational = new Rational(235, 100);
-            } else {
-                rational = new Rational(width, height);
-            }
-            builder.setAspectRatio(rational);
+            final Rational rational = getAspectRatio(width, height);
             keyBuilder.append(rational);
+        }
+        // exactly what buildParams does with the hint: measured while the content is not in the
+        // system window yet, and otherwise the one kept from before (it does not move there)
+        if (session.state != PipSession.STATE_SYSTEM) {
+            if (getSourceRect(session, tmpRect)) {
+                keyBuilder.append('|').append(tmpRect.toShortString());
+            }
+        } else if (lastHintValid) {
+            keyBuilder.append('|').append(lastHint.toShortString());
+        }
+        actionsTmp.clear();
+        session.content.getSystemActions(actionsTmp, activity.getMaxNumPictureInPictureActions());
+        for (int i = 0; i < actionsTmp.size(); i++) {
+            final PipAction action = actionsTmp.get(i);
+            keyBuilder.append('|').append(action.id).append(action.iconRes).append(action.enabled);
+        }
+        actionsTmp.clear();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            keyBuilder.append('|').append(PipEnvironment.useAutoEnter() && session.state != PipSession.STATE_SYSTEM);
+        }
+        return keyBuilder.toString();
+    }
+
+    private static @NonNull Rational getAspectRatio(int width, int height) {
+        final float ratio = width / (float) height;
+        if (ratio < MIN_RATIO) {
+            return new Rational(45, 100);
+        } else if (ratio > MAX_RATIO) {
+            return new Rational(235, 100);
+        }
+        return new Rational(width, height);
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private PictureInPictureParams buildParams(@NonNull PipSession session) {
+        // once per change now, not once per tick: the key is checked before this is called
+        PipCoordinator.log("params changed, content=" + session.content.getClass().getSimpleName()
+                + " state=" + session.state);
+        final PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder();
+        final int width = session.content.getContentWidth();
+        final int height = session.content.getContentHeight();
+        if (width > 0 && height > 0) {
+            builder.setAspectRatio(getAspectRatio(width, height));
         }
         // the primary UI is gone in PiP: keep the hint taken before, the system may read the
         // params again while the enter transition starts (an empty hint cancels its animation)
@@ -240,20 +279,11 @@ final class SystemHost {
         }
         if (lastHintValid) {
             builder.setSourceRectHint(lastHint);
-            keyBuilder.append('|').append(lastHint.toShortString());
         }
-        final ArrayList<RemoteAction> actions = buildActions(session);
-        builder.setActions(actions);
-        for (int i = 0; i < actions.size(); i++) {
-            final RemoteAction action = actions.get(i);
-            keyBuilder.append('|').append(action.getTitle()).append(action.isEnabled());
-        }
+        builder.setActions(buildActions(session));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            final boolean autoEnter = PipEnvironment.useAutoEnter() && session.state != PipSession.STATE_SYSTEM;
-            builder.setAutoEnterEnabled(autoEnter);
-            keyBuilder.append('|').append(autoEnter);
+            builder.setAutoEnterEnabled(PipEnvironment.useAutoEnter() && session.state != PipSession.STATE_SYSTEM);
         }
-        paramsKey = keyBuilder.toString();
         return builder.build();
     }
 
@@ -263,6 +293,8 @@ final class SystemHost {
     private static final String EXTRA_ACTION_ID = "action_id";
 
     private final ArrayList<PipAction> actionsTmp = new ArrayList<>();
+    /** The pending intent per action id: it never changes, and building one is a binder call. */
+    private final HashMap<Integer, PendingIntent> actionIntents = new HashMap<>();
     private boolean receiverRegistered;
 
     private final BroadcastReceiver actionReceiver = new BroadcastReceiver() {
@@ -285,11 +317,15 @@ final class SystemHost {
         session.content.getSystemActions(actionsTmp, activity.getMaxNumPictureInPictureActions());
         for (int i = 0; i < actionsTmp.size(); i++) {
             final PipAction action = actionsTmp.get(i);
-            final Intent intent = new Intent(ACTION_INTENT);
-            intent.setPackage(activity.getPackageName());
-            intent.putExtra(EXTRA_ACTION_ID, action.id);
-            // the request code is the action id: the same PendingIntent is reused, not piled up
-            final PendingIntent pendingIntent = PendingIntent.getBroadcast(activity, action.id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            PendingIntent pendingIntent = actionIntents.get(action.id);
+            if (pendingIntent == null) {
+                final Intent intent = new Intent(ACTION_INTENT);
+                intent.setPackage(activity.getPackageName());
+                intent.putExtra(EXTRA_ACTION_ID, action.id);
+                // the request code is the action id: the same PendingIntent is reused, not piled up
+                pendingIntent = PendingIntent.getBroadcast(activity, action.id, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                actionIntents.put(action.id, pendingIntent);
+            }
             final RemoteAction remoteAction = new RemoteAction(actionIcon(activity, action.iconRes), action.title, action.title, pendingIntent);
             remoteAction.setEnabled(action.enabled);
             result.add(remoteAction);

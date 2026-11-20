@@ -80,6 +80,8 @@ final class FloatingHost {
     private static final float SIDE_PADDING_DP = 16;
     private static final float ROUNDED_CORNERS_DP = 10;
     private static final float MIN_SCALE_FACTOR = 0.75f;
+    /** Distance of the progress line from the bottom edge: above the expand button in that corner. */
+    private static final int PROGRESS_BOTTOM_DP = 20;
 
     private static final FloatPropertyCompat<FloatingHost> PIP_X_PROPERTY = new SimpleFloatPropertyCompat<>("pipX", obj -> obj.pipX, (obj, value) -> {
         obj.windowLayoutParams.x = (int) (obj.pipX = value);
@@ -216,6 +218,27 @@ final class FloatingHost {
         return (int) (getSuggestedWidth(ratio) * ratio);
     }
 
+    /**
+     * The largest scale at which the window still fits the screen. Measured on both edges: the
+     * old formula used the short side for the width, which capped a landscape video at about half
+     * the screen width and made the window look stuck at a quarter of the screen.
+     */
+    private static float getMaxScaleFactor(float ratio) {
+        final float baseWidth = getSuggestedWidth(ratio);
+        final float baseHeight = getSuggestedHeight(ratio);
+        if (baseWidth <= 0 || baseHeight <= 0) {
+            return 1f;
+        }
+        final float maxWidth = AndroidUtilities.displaySize.x - sidePadding() * 2;
+        final float maxHeight = AndroidUtilities.displaySize.y - sidePadding() * 2;
+        return Math.max(MIN_SCALE_FACTOR, Math.min(maxWidth / baseWidth, maxHeight / baseHeight));
+    }
+
+    /** A saved scale from another video or orientation may not fit this one: keep it usable. */
+    private static float clampScale(float scale, float ratio) {
+        return MathUtils.clamp(scale, MIN_SCALE_FACTOR, getMaxScaleFactor(ratio));
+    }
+
     private float getRatio() {
         return getRatio(content.getContentWidth(), content.getContentHeight());
     }
@@ -266,10 +289,14 @@ final class FloatingHost {
     /* Show / hide */
 
     @Nullable PipTextureView show(@Nullable Bitmap placeholder, boolean animateAppear) {
+        scaleFactor = clampScale(PipConfig.get().getScaleFactor(), getRatio());
+        maxScaleFactor = getMaxScaleFactor(getRatio());
+        if (Math.abs(scaleFactor - PipConfig.get().getScaleFactor()) > 0.001f) {
+            // a value saved for a wider video does not fit this one: the clamped one is the new truth
+            PipConfig.get().setScaleFactor(scaleFactor);
+        }
         final RectF rect = new RectF();
         getTargetRect(content.getContentWidth(), content.getContentHeight(), rect);
-        scaleFactor = PipConfig.get().getScaleFactor();
-        maxScaleFactor = (Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y) - sidePadding() * 2) / (float) getSuggestedWidth();
         pipWidth = (int) rect.width();
         pipHeight = (int) rect.height();
         pipX = rect.left;
@@ -278,12 +305,14 @@ final class FloatingHost {
 
         createSprings();
         createViews();
+        refreshControlsAvailability();
         TabletDebugLog.d("pip", "floating show overlay=" + shouldUseOverlay()
                 + " canOverlay=" + PipEnvironment.canDrawOverlays(activity)
                 + " isOverlayAllowed=" + content.isOverlayAllowed()
                 + " playbackControls=" + content.hasPlaybackControls()
                 + " canShare=" + content.canShare()
-                + " canSettings=" + content.canOpenSettings()
+                + " canSpeed=" + content.canChangeSpeed()
+                + " canLoop=" + content.canLoop()
                 + " size=" + pipWidth + "x" + pipHeight);
 
         floatingView = content.getFloatingView();
@@ -389,6 +418,8 @@ final class FloatingHost {
         AndroidUtilities.removeFromParent(target);
         contentFrameLayout.addView(target, 0, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         addWindow();
+        // back from the system window: the content may have changed while it was there
+        refreshControlsAvailability();
         invalidateState();
     }
 
@@ -556,7 +587,8 @@ final class FloatingHost {
         }
         AndroidUtilities.checkDisplaySize(activity, activity.getResources().getConfiguration());
         PipConfig.reset();
-        maxScaleFactor = (Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y) - sidePadding() * 2) / (float) getSuggestedWidth();
+        maxScaleFactor = getMaxScaleFactor(getRatio());
+        scaleFactor = clampScale(scaleFactor, getRatio());
         final int width = (int) (getSuggestedWidth() * scaleFactor);
         final int height = (int) (getSuggestedHeight() * scaleFactor);
         if (pipWidth != width || pipHeight != height) {
@@ -962,6 +994,11 @@ final class FloatingHost {
                     return false;
                 }
                 final int action = ev.getActionMasked();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    // a gesture that ended in a window that swallowed the UP (the menu popup, the
+                    // system window) left a child consuming every later event: start clean
+                    consumingChild = null;
+                }
                 if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
                     if (ev.getPointerCount() == 1) {
                         canLongClick = true;
@@ -1098,29 +1135,46 @@ final class FloatingHost {
         shareButton = createActionButton(context, R.drawable.msg_header_share, padding, buttonSize);
         controlsView.addView(shareButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin + 2 * actionStep, 0));
         shareButton.setVisibility(content.canShare() ? View.VISIBLE : View.GONE);
-        shareButton.setOnClickListener(v -> content.share());
+        shareButton.setOnClickListener(v -> {
+            TabletDebugLog.d("pip", "button share");
+            content.share();
+        });
 
         settingsButton = createActionButton(context, R.drawable.video_settings, padding, buttonSize);
         controlsView.addView(settingsButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin + actionStep, 0));
         settingsButton.setVisibility(content.canChangeSpeed() || !content.getQualityOptions().isEmpty() || content.canLoop() ? View.VISIBLE : View.GONE);
-        settingsButton.setOnClickListener(v -> togglePanel(PANEL_SETTINGS, settingsButton));
+        settingsButton.setOnClickListener(v -> {
+            TabletDebugLog.d("pip", "button settings");
+            togglePanel(PANEL_SETTINGS, settingsButton);
+        });
 
         moreButton = createActionButton(context, R.drawable.media_more, padding, buttonSize);
         controlsView.addView(moreButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.RIGHT, 0, margin, margin, 0));
-        moreButton.setOnClickListener(v -> togglePanel(PANEL_MORE, moreButton));
+        moreButton.setOnClickListener(v -> {
+            TabletDebugLog.d("pip", "button more");
+            togglePanel(PANEL_MORE, moreButton);
+        });
 
         final ImageView closeButton = createActionButton(context, R.drawable.pip_video_close, padding, buttonSize);
         controlsView.addView(closeButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.LEFT, margin, margin, 0, 0));
-        closeButton.setOnClickListener(v -> session.dismiss());
+        closeButton.setOnClickListener(v -> {
+            TabletDebugLog.d("pip", "button close");
+            session.dismiss();
+        });
 
         final ImageView expandButton = createActionButton(context, R.drawable.pip_video_expand, padding, buttonSize);
-        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.BOTTOM | Gravity.RIGHT, 0, 0, margin, dp(6)));
-        expandButton.setOnClickListener(v -> session.expand());
+        // above the progress line: the two no longer sit on top of each other in this corner
+        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.BOTTOM | Gravity.RIGHT, 0, 0, margin, dp(30)));
+        expandButton.setOnClickListener(v -> {
+            TabletDebugLog.d("pip", "button expand");
+            session.expand();
+        });
 
         playPauseButton = new ImageView(context);
         ThemeBind.colorFilter(playPauseButton, Theme.key_voipgroup_actionBarItems, PorterDuff.Mode.MULTIPLY);
         ThemeBind.selectorBackground(playPauseButton, Theme.createSelectorDrawable(Theme.getColor(Theme.key_listSelector)), null, ThemeBind.of(Theme.key_listSelector));
         playPauseButton.setOnClickListener(v -> {
+            TabletDebugLog.d("pip", "button play/pause playing=" + content.isPlaying());
             if (content.isPlaying()) {
                 content.pause();
             } else {
@@ -1171,6 +1225,7 @@ final class FloatingHost {
 
     private void showPanel(int kind, @NonNull View anchor) {
         hidePanel();
+        refreshControlsAvailability();
         final Context context = controlsView.getContext();
         final ActionBarPopupWindowLayout layout = new ActionBarPopupWindowLayout(context);
         layout.setBackgroundColor(0xf9222222);
@@ -1381,6 +1436,27 @@ final class FloatingHost {
         }
     }
 
+    /**
+     * The content decides what it can do, and it can change while the window is up (the viewer
+     * gets a message, the player appears): every entry is read again when the menu opens and when
+     * the window is shown again.
+     */
+    private void refreshControlsAvailability() {
+        if (shareButton != null) {
+            shareButton.setVisibility(content.canShare() ? View.VISIBLE : View.GONE);
+        }
+        if (settingsButton != null) {
+            settingsButton.setVisibility(content.canChangeSpeed() || !content.getQualityOptions().isEmpty() || content.canLoop()
+                    ? View.VISIBLE : View.GONE);
+        }
+        if (playPauseButton != null) {
+            playPauseButton.setVisibility(content.hasPlaybackControls() ? View.VISIBLE : View.GONE);
+        }
+        if (videoProgressView != null) {
+            videoProgressView.setVisibility(content.hasPlaybackControls() ? View.VISIBLE : View.GONE);
+        }
+    }
+
     /** The entries that have no icon in the row: show in chat, forward, close. */
     private boolean buildMorePanel(Context context, LinearLayout column) {
         if (content.canShowInChat()) {
@@ -1412,18 +1488,46 @@ final class FloatingHost {
     private final class VideoProgressView extends View {
         private final Paint progressPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint bufferPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint trackPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint thumbPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         VideoProgressView(Context context) {
             super(context);
             progressPaint.setColor(Color.WHITE);
             progressPaint.setStyle(Paint.Style.STROKE);
             progressPaint.setStrokeCap(Paint.Cap.ROUND);
-            progressPaint.setStrokeWidth(dp(2));
+            progressPaint.setStrokeWidth(dp(3));
             bufferPaint.setColor(progressPaint.getColor());
-            bufferPaint.setAlpha((int) (progressPaint.getAlpha() * 0.3f));
+            bufferPaint.setAlpha((int) (progressPaint.getAlpha() * 0.45f));
             bufferPaint.setStyle(Paint.Style.STROKE);
             bufferPaint.setStrokeCap(Paint.Cap.ROUND);
-            bufferPaint.setStrokeWidth(dp(2));
+            bufferPaint.setStrokeWidth(dp(3));
+            // the full length of the video, which the played and buffered parts are drawn on
+            trackPaint.setColor(progressPaint.getColor());
+            trackPaint.setAlpha((int) (progressPaint.getAlpha() * 0.22f));
+            trackPaint.setStyle(Paint.Style.STROKE);
+            trackPaint.setStrokeCap(Paint.Cap.ROUND);
+            trackPaint.setStrokeWidth(dp(3));
+            thumbPaint.setColor(Color.WHITE);
+            thumbPaint.setStyle(Paint.Style.FILL);
+        }
+
+        /** The line is drawn above the bottom edge, clear of the expand button in that corner. */
+        private float lineY() {
+            return getHeight() - dp(PROGRESS_BOTTOM_DP);
+        }
+
+        /** Where the track starts and ends; the touch handling measures against the same numbers. */
+        private float trackLeft() {
+            return dp(12);
+        }
+
+        private float trackRight() {
+            return getWidth() - dp(12);
+        }
+
+        private float thumbRadius() {
+            return seeking ? dp(7) : dp(5);
         }
 
         private boolean seeking;
@@ -1441,26 +1545,22 @@ final class FloatingHost {
             if (duration <= 0 || duration == C.TIME_UNSET) {
                 return false;
             }
-            final float left = dp(10);
-            final float available = getWidth() - left - dp(10);
+            final float left = trackLeft();
+            final float available = trackRight() - left;
             if (available <= 0) {
                 return false;
             }
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    TabletDebugLog.d("pip", "progress touch down y=" + event.getY() + " h=" + getHeight()
-                            + " band=" + (getHeight() - dp(48)));
                     // only the band around the drawn line takes the drag: above it stays with the buttons
                     // and with the window drag gesture
-                    if (event.getY() < getHeight() - dp(48)) {
+                    if (Math.abs(event.getY() - lineY()) > dp(16)) {
                         return false;
                     }
-                    // the expand button sits in this corner, as the exit-fullscreen button does in the
-                    // viewer: leave the corner to it and keep the rest of the band draggable
-                    if (event.getX() >= getWidth() - dp(46)) {
-                        return false;
-                    }
+                    // the whole line is draggable now: the expand button was moved above it, so no
+                    // part of the track is left out to make room for that button
                     seeking = true;
+                    invalidate();
                     AndroidUtilities.cancelRunOnUIThread(progressRunnable);
                     seekToTouch(event.getX(), left, available, duration);
                     return true;
@@ -1499,14 +1599,22 @@ final class FloatingHost {
 
         @Override
         protected void onDraw(@NonNull Canvas canvas) {
-            final int width = getWidth();
-            final float left = dp(10);
-            final float available = width - left - dp(10);
-            final float y = getHeight() - dp(8);
-            if (bufferProgress != 0) {
-                canvas.drawLine(left, y, left + available * bufferProgress, y, bufferPaint);
+            final float left = trackLeft();
+            final float right = trackRight();
+            final float available = right - left;
+            if (available <= 0) {
+                return;
             }
-            canvas.drawLine(left, y, left + available * videoProgress, y, progressPaint);
+            final float y = lineY();
+            final float progress = MathUtils.clamp(videoProgress, 0f, 1f);
+            final float buffered = MathUtils.clamp(bufferProgress, 0f, 1f);
+            // the whole video first: without it the played part read as a stray line
+            canvas.drawLine(left, y, right, y, trackPaint);
+            if (buffered > 0) {
+                canvas.drawLine(left, y, left + available * buffered, y, bufferPaint);
+            }
+            canvas.drawLine(left, y, left + available * progress, y, progressPaint);
+            canvas.drawCircle(left + available * progress, y, thumbRadius(), thumbPaint);
         }
     }
 

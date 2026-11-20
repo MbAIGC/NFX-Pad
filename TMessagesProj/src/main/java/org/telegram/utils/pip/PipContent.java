@@ -132,13 +132,6 @@ public interface PipContent {
 
     default void share() {}
 
-    /** The floating window offers a settings entry. */
-    default boolean canOpenSettings() {
-        return false;
-    }
-
-    default void openSettings() {}
-
     /* Playback speed */
 
     default boolean canChangeSpeed() {
@@ -182,6 +175,11 @@ public interface PipContent {
 
     /** Buttons of the system PiP window, at most {@code maxActions}. */
     default void getSystemActions(@NonNull java.util.List<PipAction> out, int maxActions) {}
+
+    /** Play/pause can be driven from the system window (a broadcast, with the app in the background). */
+    default boolean hasSystemPlayPause() {
+        return false;
+    }
 
     default void onSystemAction(int actionId) {}
 

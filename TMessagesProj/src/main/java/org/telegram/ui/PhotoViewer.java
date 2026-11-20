@@ -124,6 +124,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.window.OnBackInvokedDispatcher;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -24254,10 +24255,28 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         return out;
     }
 
-    // the playback entries of the system PiP window: speed, back, forward
-    private static final int ACTION_PIP_SPEED = 1;
-    private static final int ACTION_PIP_BACK = 2;
-    private static final int ACTION_PIP_FORWARD = 3;
+    // the playback entries of the system PiP window: play/pause, speed, back, forward
+    private static final int ACTION_PIP_PLAY_PAUSE = 1;
+    private static final int ACTION_PIP_SPEED = 2;
+    private static final int ACTION_PIP_BACK = 3;
+    private static final int ACTION_PIP_FORWARD = 4;
+
+    /**
+     * The icon of the speed entry, the one its value maps to, so the current speed is visible on
+     * the small window itself and not only in a title the system never draws for a button.
+     */
+    private static @DrawableRes int speedIconRes(float speed) {
+        if (speed < 0.35f) {
+            return R.drawable.msg_speed_0_2;
+        } else if (speed < 0.75f) {
+            return R.drawable.msg_speed_slow;
+        } else if (speed < 1.25f) {
+            return R.drawable.msg_speed_normal;
+        } else if (speed < 1.75f) {
+            return R.drawable.msg_speed_fast;
+        }
+        return R.drawable.msg_speed_superfast;
+    }
 
     /** The speed value as the viewer shows it: "1x", "1.5x". */
     private static String formatVideoSpeed(float speed) {
@@ -24306,6 +24325,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         @Override
         public boolean canChangeSpeed() {
             return videoPlayer != null || photoViewerWebView != null;
+        }
+
+        @Override
+        public boolean hasSystemPlayPause() {
+            // the first system PiP slot takes play/pause: the player itself has to be there, a web
+            // view cannot be told to pause from a broadcast without the app coming back
+            return videoPlayer != null || (photoViewerWebView != null && photoViewerWebView.isControllable());
         }
 
         @Override
@@ -24381,15 +24407,21 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         @Override
         public void getSystemActions(@NonNull java.util.List<org.telegram.utils.pip.PipAction> out, int maxActions) {
-            // Only icon buttons are possible in system PiP: the speed entry steps through the values
-            // instead of opening the viewer's slider, and the two seek entries skip ten seconds.
-            // Order matters, the system keeps the first maxActions entries.
+            // System PiP takes three entries at most and only an icon plus a title, so:
+            // play/pause on the first slot (the one the system would otherwise fill itself),
+            // speed on the second - it steps through the values and its icon follows the value it is
+            // on, so the current speed is visible without a title -, and a single seek entry last.
             final boolean seekable = videoPlayer != null;
+            final boolean playing = isPlaying();
             final java.util.ArrayList<org.telegram.utils.pip.PipAction> actions = new java.util.ArrayList<>(3);
-            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SPEED, R.drawable.msg_speed_normal,
-                    getString(R.string.VideoPlayerSpeed) + " " + formatVideoSpeed(currentVideoSpeed), canChangeSpeed()));
-            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_BACK, R.drawable.nfxp_rewind_10,
-                    "-10s", seekable));
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_PLAY_PAUSE,
+                    playing ? R.drawable.pip_pause_large : R.drawable.pip_play_large,
+                    getString(playing ? R.string.AccActionPause : R.string.AccActionPlay),
+                    hasSystemPlayPause()));
+            actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SPEED,
+                    speedIconRes(currentVideoSpeed),
+                    getString(R.string.VideoPlayerSpeed) + " " + formatVideoSpeed(currentVideoSpeed),
+                    canChangeSpeed()));
             actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_FORWARD, R.drawable.nfxp_forward_10,
                     "+10s", seekable));
             for (int i = 0; i < actions.size() && out.size() < maxActions; i++) {
@@ -24399,9 +24431,21 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
         @Override
         public void onSystemAction(int actionId) {
-            if (videoPlayer == null) {
+            if (actionId == ACTION_PIP_PLAY_PAUSE) {
+                if (isPlaying()) {
+                    pause();
+                } else {
+                    if (isCompleted()) {
+                        seekTo(0);
+                    }
+                    play();
+                }
+                if (pipSession != null) {
+                    pipSession.invalidate();
+                }
                 return;
             }
+            final boolean seekable = videoPlayer != null || (photoViewerWebView != null && photoViewerWebView.isControllable());
             if (actionId == ACTION_PIP_SPEED) {
                 // cycle 1x -> 1.5x -> 2x -> 0.5x -> 1x, the params are rebuilt so the title follows
                 final float next;
@@ -24419,14 +24463,17 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     pipSession.invalidate();
                 }
             } else if (actionId == ACTION_PIP_BACK || actionId == ACTION_PIP_FORWARD) {
-                final long total = videoPlayer.getDuration();
-                if (total <= 0) {
+                if (!seekable) {
+                    return;
+                }
+                final long total = getDuration();
+                if (total <= 0 || total == C.TIME_UNSET) {
                     return;
                 }
                 final long delta = 10_000L;
                 final long target = Math.max(0, Math.min(total,
-                        videoPlayer.getCurrentPosition() + (actionId == ACTION_PIP_FORWARD ? delta : -delta)));
-                videoPlayer.seekTo(target);
+                        getCurrentPosition() + (actionId == ACTION_PIP_FORWARD ? delta : -delta)));
+                seekTo(target);
                 if (pipSession != null) {
                     pipSession.invalidate();
                 }
@@ -24457,21 +24504,6 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
             closePhoto(true, false);
             chat.scrollToMessageId(currentMessageObject.getId(), 0, true, 0, true, 0);
-        }
-
-        @Override
-        public boolean canOpenSettings() {
-            return parentActivity instanceof LaunchActivity;
-        }
-
-        @Override
-        public void openSettings() {
-            if (!(parentActivity instanceof LaunchActivity)) {
-                return;
-            }
-            final LaunchActivity launchActivity = (LaunchActivity) parentActivity;
-            closePhoto(true, false);
-            launchActivity.presentFragment(new SettingsActivity());
         }
 
         @Override

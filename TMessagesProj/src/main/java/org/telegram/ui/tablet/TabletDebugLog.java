@@ -9,11 +9,13 @@ import android.util.Log;
 
 import androidx.core.content.FileProvider;
 
+import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BuildConfig;
 
 import tw.nekomimi.nekogram.NekoConfig;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.text.SimpleDateFormat;
@@ -126,35 +128,88 @@ public final class TabletDebugLog {
         }
     }
 
+    /**
+     * One open file for the whole process instead of open/write/close per line: the log is written
+     * from the main thread, and a file handle per line was measurable while the floating window
+     * was dragging or seeking. The buffer is flushed shortly after a line is written, so a crash
+     * still leaves the last lines on disk.
+     */
+    private static BufferedWriter writer;
+    private static File writerFile;
+    private static boolean writerDirty;
+    private static final Runnable flushRunnable = () -> {
+        synchronized (TabletDebugLog.class) {
+            flushLocked();
+        }
+    };
+
     private static synchronized void appendToFile(String line) {
         try {
             final File file = logFile();
             if (file == null) {
                 return;
             }
+            if (writer == null || writerFile == null || !writerFile.equals(file)) {
+                closeLocked();
+                writer = new BufferedWriter(new FileWriter(file, true));
+                writerFile = file;
+            }
             if (file.length() > MAX_BYTES) {
+                closeLocked();
                 final File previous = new File(file.getParentFile(), FILE_NAME + ".1");
                 if (previous.exists() && !previous.delete()) {
                     // keep going with the current file rather than growing without a bound
                 }
                 file.renameTo(previous);
+                writer = new BufferedWriter(new FileWriter(file, true));
+                writerFile = file;
+                headerWritten = false;
             }
-            final FileWriter writer = new FileWriter(file, true);
-            try {
-                if (!headerWritten) {
-                    headerWritten = true;
-                    writer.write("# NFX-Pad diagnostics\n");
-                    writer.write("# sdk=" + Build.VERSION.SDK_INT
-                            + " device=" + Build.MANUFACTURER + " " + Build.MODEL
-                            + " package=" + BuildConfig.APPLICATION_ID + "\n");
-                }
-                writer.write(TIME.format(new Date()) + "  " + line + "\n");
-            } finally {
-                writer.close();
+            if (!headerWritten) {
+                headerWritten = true;
+                writer.write("# NFX-Pad diagnostics\n");
+                writer.write("# sdk=" + Build.VERSION.SDK_INT
+                        + " device=" + Build.MANUFACTURER + " " + Build.MODEL
+                        + " package=" + BuildConfig.APPLICATION_ID + "\n");
+            }
+            writer.write(TIME.format(new Date()) + "  " + line + "\n");
+            if (!writerDirty) {
+                writerDirty = true;
+                AndroidUtilities.runOnUIThread(flushRunnable, 400);
             }
         } catch (Throwable ignore) {
             // diagnostics must never break the app
         }
+    }
+
+    private static void flushLocked() {
+        writerDirty = false;
+        if (writer == null) {
+            return;
+        }
+        try {
+            writer.flush();
+        } catch (Throwable ignore) {
+            // diagnostics must never break the app
+        }
+    }
+
+    private static void closeLocked() {
+        if (writer != null) {
+            try {
+                writer.close();
+            } catch (Throwable ignore) {
+                // diagnostics must never break the app
+            }
+            writer = null;
+            writerFile = null;
+        }
+    }
+
+    /** The shared file is closed before it is handed out, so the last lines are on disk. */
+    private static synchronized File writableLogFile() {
+        flushLocked();
+        return logFile();
     }
 
     private static File logFile() {
@@ -166,7 +221,8 @@ public final class TabletDebugLog {
     }
 
     /** True when there is something worth sharing. */
-    public static boolean hasLog() {
+    public static synchronized boolean hasLog() {
+        flushLocked();
         final File file = logFile();
         return file != null && file.exists() && file.length() > 0;
     }
@@ -186,7 +242,10 @@ public final class TabletDebugLog {
             return false;
         }
         try {
-            final File file = logFile();
+            final File file = writableLogFile();
+            if (file == null) {
+                return false;
+            }
             final Uri uri = FileProvider.getUriForFile(activity, BuildConfig.APPLICATION_ID + ".provider", file);
             final Intent intent = new Intent(Intent.ACTION_SEND);
             intent.setType("text/plain");
