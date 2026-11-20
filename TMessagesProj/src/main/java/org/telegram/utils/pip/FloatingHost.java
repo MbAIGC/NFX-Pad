@@ -1163,9 +1163,10 @@ final class FloatingHost {
         });
 
         final ImageView expandButton = createActionButton(context, R.drawable.pip_video_expand, padding, buttonSize);
-        // top left corner, the free one: the three entries take the top right, close the bottom
-        // left, and the progress line runs along the bottom
-        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.TOP | Gravity.LEFT, margin, margin, 0, 0));
+        // Left edge, vertically centred. The top row has no room for a fourth button at this width
+        // (close takes the top left, the three entries the top right), and the bottom carries the
+        // progress line.
+        controlsView.addView(expandButton, LayoutHelper.createFrame(buttonSize, buttonSize, Gravity.LEFT | Gravity.CENTER_VERTICAL, margin, 0, 0, 0));
         expandButton.setOnClickListener(v -> {
             TabletDebugLog.d("pip", "button expand");
             session.expand();
@@ -1368,6 +1369,8 @@ final class FloatingHost {
                     ActionBarMenuSlider.SpeedSlider.MIN_SPEED
                             + (ActionBarMenuSlider.SpeedSlider.MAX_SPEED - ActionBarMenuSlider.SpeedSlider.MIN_SPEED) * value));
             slider.setSpeed(content.getPlaybackSpeed(), false);
+            // what the window believes the speed is, so a report tells whether it came from the player
+            TabletDebugLog.d("pip", "speed panel speed=" + content.getPlaybackSpeed());
             column.addView(slider, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 44));
             popupSpeedSlider = slider;
             any = true;

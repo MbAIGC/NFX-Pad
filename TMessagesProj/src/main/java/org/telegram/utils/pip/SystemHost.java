@@ -431,24 +431,31 @@ final class SystemHost {
         final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setTypeface(AndroidUtilities.bold());
         paint.setTextAlign(Paint.Align.CENTER);
-        // the longest value the entry can show ("1.25x") decides the size, so every value is legible
-        float size = box * 0.42f;
-        paint.setTextSize(size);
-        final float maxWidth = box * 0.94f;
-        final float width = paint.measureText(value);
-        if (width > maxWidth && width > 0) {
-            size *= maxWidth / width;
-            paint.setTextSize(size);
-        }
-        // a dark outline first: the window shows the video behind the button
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(size * 0.22f);
-        paint.setColor(0xFF000000);
-        final Paint.FontMetrics fm = paint.getFontMetrics();
-        final float y = box / 2f - (fm.ascent + fm.descent) / 2f;
-        canvas.drawText(value, box / 2f, y, paint);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(0xFFFFFFFF);
+        // the button is about 24dp wide, so the size is what makes the text as wide as the box, not a
+        // fixed dp: a stroke outline on glyphs this small fills the gaps and the value turns into a blob
+        float size = box;
+        paint.setTextSize(size);
+        final float maxWidth = box * 0.95f;
+        final float width = paint.measureText(value);
+        if (width > maxWidth && width > 0) {
+            size = box * maxWidth / width;
+            paint.setTextSize(size);
+        }
+        // then the other direction: a single character fitted to the width alone would be taller
+        // than the box and its edges would be cut off
+        final Paint.FontMetrics probe = paint.getFontMetrics();
+        final float textHeight = probe.descent - probe.ascent;
+        final float maxHeight = box * 0.8f;
+        if (textHeight > maxHeight) {
+            size *= maxHeight / textHeight;
+            paint.setTextSize(size);
+        }
+        // a soft shadow instead of an outline: the window shows the video behind the button
+        paint.setShadowLayer(Math.max(1f, box * 0.07f), 0, 0, 0xCC000000);
+        final Paint.FontMetrics fm = paint.getFontMetrics();
+        final float y = box / 2f - (fm.ascent + fm.descent) / 2f;
         canvas.drawText(value, box / 2f, y, paint);
         final Icon icon = Icon.createWithBitmap(bitmap);
         actionIcons.put(key, icon);

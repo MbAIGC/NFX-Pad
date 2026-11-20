@@ -637,6 +637,19 @@ public class ChatActivity extends BaseFragment implements
     private GridLayoutManagerFixed chatLayoutManager;
     /** Only used to emit one diagnostic line when the list layout pass comes up without any child. */
     private boolean listLayoutWasEmpty;
+    /**
+     * The anchor system PiP destroys. Entering PiP shrinks the whole activity to the window size, so
+     * the message list is laid out at a fraction of its height, loses the position it was at, and comes
+     * back anchored at adapter position 0 - the newest message, because the list is reversed. The first
+     * visible message and its offset are kept here and put back once the list is tall again.
+     */
+    private int pipAnchorMessageId;
+    private int pipAnchorTop;
+    private int pipAnchorListHeight;
+    private boolean pipAnchorValid;
+    /** The list can still be reloading when the height comes back: a few more attempts, then let go. */
+    private int pipAnchorAttempts;
+    private static final int PIP_ANCHOR_MAX_ATTEMPTS = 8;
     public ChatActivityAdapter chatAdapter;
     private UnreadCounterTextView bottomOverlayChatText;
     private boolean bottomOverlayLinks;
@@ -14858,12 +14871,90 @@ public class ChatActivity extends BaseFragment implements
         if (chatListView == null || chatLayoutManager == null) {
             return;
         }
+        // the list is tall again after the PiP resize: put the anchor back
+        restorePipAnchorIfPossible();
         final boolean empty = chatListView.getChildCount() == 0;
         if (empty == listLayoutWasEmpty) {
             return;
         }
         listLayoutWasEmpty = empty;
         TabletDebugLog.d("scroll", (empty ? "list layout empty " : "list layout refilled ") + chatListShapeForLog());
+    }
+
+    /**
+     * Called before the activity content is hidden for system PiP: the list still has its full height
+     * and its real anchor here, so this is the last moment the position can be read.
+     */
+    public void savePipAnchor() {
+        if (chatListView == null || chatLayoutManager == null || chatAdapter == null) {
+            return;
+        }
+        final int first = chatLayoutManager.findFirstVisibleItemPosition();
+        if (first < chatAdapter.messagesStartRow || first >= chatAdapter.messagesEndRow) {
+            return;
+        }
+        final int index = first - chatAdapter.messagesStartRow;
+        if (index < 0 || index >= messages.size()) {
+            return;
+        }
+        final MessageObject message = messages.get(index);
+        if (message == null || message.getId() == 0) {
+            return;
+        }
+        final View child = chatLayoutManager.findViewByPosition(first);
+        pipAnchorMessageId = message.getId();
+        pipAnchorTop = child != null ? child.getTop() : 0;
+        pipAnchorListHeight = chatListView.getHeight();
+        pipAnchorValid = true;
+        pipAnchorAttempts = 0;
+        // shape only: a position, an offset and a height, never the id or the text
+        TabletDebugLog.d("scroll", "anchor saved pos=" + first + " top=" + pipAnchorTop + " h=" + pipAnchorListHeight);
+    }
+
+    /**
+     * Puts the saved anchor back, once. Waits until the list is at its own height again: while the
+     * activity is still the small PiP window the anchor cannot be restored meaningfully.
+     */
+    private void restorePipAnchorIfPossible() {
+        if (!pipAnchorValid || chatListView == null || chatLayoutManager == null || chatAdapter == null) {
+            return;
+        }
+        final int height = chatListView.getHeight();
+        if (pipAnchorListHeight <= 0 || height < pipAnchorListHeight * 0.9f) {
+            return;
+        }
+        final int position = findAdapterPositionByMessageId(pipAnchorMessageId);
+        if (position < 0) {
+            // the list may still be loading the same messages back: try again shortly, a bounded
+            // number of times, so a message that is really gone does not pin the chat forever
+            if (++pipAnchorAttempts < PIP_ANCHOR_MAX_ATTEMPTS) {
+                chatListView.postDelayed(this::restorePipAnchorIfPossible, 120);
+                return;
+            }
+            pipAnchorValid = false;
+            TabletDebugLog.d("scroll", "anchor dropped, message not in list h=" + height);
+            return;
+        }
+        pipAnchorValid = false;
+        final int first = chatLayoutManager.findFirstVisibleItemPosition();
+        if (first == position) {
+            return;
+        }
+        chatLayoutManager.scrollToPositionWithOffset(position, pipAnchorTop);
+        TabletDebugLog.d("scroll", "anchor restored pos=" + position + " top=" + pipAnchorTop + " was=" + first + " h=" + height);
+    }
+
+    private int findAdapterPositionByMessageId(int messageId) {
+        if (chatAdapter == null || messageId == 0) {
+            return -1;
+        }
+        for (int i = 0; i < messages.size(); i++) {
+            final MessageObject message = messages.get(i);
+            if (message != null && message.getId() == messageId) {
+                return chatAdapter.messagesStartRow + i;
+            }
+        }
+        return -1;
     }
 
     private boolean isSearchDiagnosticsRelevant() {
@@ -33293,6 +33384,9 @@ public class ChatActivity extends BaseFragment implements
             chatListView.post(() -> {
                 if (chatListView != null && chatListView.isAttachedToWindow()) {
                     TabletDebugLog.d("scroll", "chat resume(laid)   " + scrollStateForLog() + " " + chatListShapeForLog());
+                    // the layout listener is the usual trigger, but a device that does not resize the
+                    // list would never fire it; this is the second, cheap chance
+                    restorePipAnchorIfPossible();
                 }
             });
         }

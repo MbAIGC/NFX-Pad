@@ -8742,7 +8742,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
         ((LaunchActivity) parentActivity).presentFragment(fragment, false, true);
     }
 
-    /** The chat picker a share opens; the caller decides what happens to the viewer around it. */
+    /** The chat picker the viewer menu opens; the caller decides what happens to the viewer around it. */
     private DialogsActivity buildForwardDialog(ArrayList<MessageObject> fmessages, boolean noQuote) {
         Bundle args = new Bundle();
         args.putBoolean("onlySelect", true);
@@ -24309,12 +24309,20 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
 
     /** The speed value as the viewer shows it: "1x", "1.5x". */
     private static String formatVideoSpeed(float speed) {
+        return formatSpeedNumber(speed) + "x";
+    }
+
+    /**
+     * The number alone, without the "x". The system PiP button is about 24dp wide, so every glyph
+     * costs legibility in the value drawn there; the accessibility title keeps the full form.
+     */
+    private static String formatSpeedNumber(float speed) {
         if (Math.abs(speed - Math.round(speed)) < 0.01f) {
-            return Math.round(speed) + "x";
+            return String.valueOf(Math.round(speed));
         }
-        // up to two decimals, trailing zero dropped: 1.1x, 1.25x, 1.8x
+        // up to two decimals, trailing zero dropped: 1.1, 1.25, 1.8
         final String two = String.format(Locale.US, "%.2f", speed);
-        return (two.endsWith("0") ? two.substring(0, two.length() - 1) : two) + "x";
+        return two.endsWith("0") ? two.substring(0, two.length() - 1) : two;
     }
 
     private final PipContent pipContent = new PipContent() {
@@ -24349,17 +24357,43 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             }
             final ArrayList<MessageObject> messages = new ArrayList<>();
             messages.add(currentMessageObject);
-            // Same picker as the viewer menu entry, but the small window has to go first: it is a
-            // window of its own and covers the picker, and the viewer behind it is torn down by the
-            // close path, which left the window on screen with dead buttons and a released player.
-            final LaunchActivity launchActivity = (LaunchActivity) parentActivity;
-            final DialogsActivity fragment = buildForwardDialog(messages, false);
-            final PipSession session = pipSession;
-            if (session != null) {
-                pipSession = null;
-                session.dismiss();
+            // What the picker of the viewer menu cannot do from here: it is a fragment inside the
+            // activity, so the small window (a window of its own) always draws above it and the
+            // list cannot be used. A bottom sheet is a window too, added after the small one, so it
+            // covers the window instead of hiding behind it, and it forwards the message itself.
+            // The window stays where it is; only the playback is held while the sheet is open.
+            final boolean wasPlaying = isPlaying();
+            if (wasPlaying) {
+                // the sheet covers the window completely: stop picture and sound while it is open,
+                // the playback is put back when the sheet closes
+                pause();
+                if (pipSession != null) {
+                    pipSession.invalidate();
+                }
             }
-            launchActivity.presentFragment(fragment, false, true);
+            final ShareAlert alert = new ShareAlert(parentActivity, messages, null, false, null, false) {
+                @Override
+                public void dismissInternal() {
+                    super.dismissInternal();
+                    // the sheet is over, whichever way it closed: put the playback back as it was.
+                    // dismissInternal is the end of every close path, so nothing is missed here.
+                    if (pipSession == null || !pipSession.isAlive() || wasPlaying == isPlaying()) {
+                        return;
+                    }
+                    if (wasPlaying) {
+                        if (isCompleted()) {
+                            seekTo(0);
+                        }
+                        play();
+                    } else {
+                        pause();
+                    }
+                    if (pipSession != null) {
+                        pipSession.invalidate();
+                    }
+                }
+            };
+            alert.show();
         }
 
         @Override
@@ -24463,7 +24497,7 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
             final String speedText = formatVideoSpeed(currentVideoSpeed);
             actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SPEED,
                     speedIconRes(currentVideoSpeed),
-                    speedText,
+                    formatSpeedNumber(currentVideoSpeed),
                     getString(R.string.VideoPlayerSpeed) + " " + speedText,
                     canChangeSpeed()));
             actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_FORWARD, R.drawable.nfxp_forward_10,

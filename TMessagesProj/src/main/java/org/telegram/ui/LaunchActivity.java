@@ -10474,6 +10474,13 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             if (changed) {
                 TabletDebugLog.d("scroll", "content " + what + "(before) " + counts + " " + visibleChatShapeForLog());
             }
+            if (changed && increment && keepLayout) {
+                // system PiP is about to shrink the whole activity: the list still has its real anchor
+                final ChatActivity chat = visibleChat();
+                if (chat != null) {
+                    chat.savePipAnchor();
+                }
+            }
             frameLayout.setVisibility(target);
             if (changed) {
                 TabletDebugLog.d("scroll", "content " + what + "(after)  " + counts + " " + visibleChatShapeForLog());
@@ -10488,6 +10495,12 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
      * jump to the newest message happened while the content was hidden, not when it came back.
      */
     private String visibleChatShapeForLog() {
+        final ChatActivity chat = visibleChat();
+        return chat != null ? chat.chatListShapeForLog() : "children=noChat";
+    }
+
+    /** The chat on screen, whichever pane holds it. */
+    private @Nullable ChatActivity visibleChat() {
         ChatActivity chat = null;
         if (rightActionBarLayout != null) {
             chat = asChat(rightActionBarLayout.getLastFragment());
@@ -10495,7 +10508,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (chat == null && actionBarLayout != null) {
             chat = asChat(actionBarLayout.getLastFragment());
         }
-        return chat != null ? chat.chatListShapeForLog() : "children=noChat";
+        return chat;
     }
 
     private static ChatActivity asChat(BaseFragment fragment) {
