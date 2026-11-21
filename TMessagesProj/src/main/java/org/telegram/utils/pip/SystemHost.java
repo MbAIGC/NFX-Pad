@@ -10,6 +10,7 @@ import android.content.IntentFilter;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.app.PictureInPictureParams;
@@ -244,7 +245,7 @@ final class SystemHost {
             final PipAction action = actionsTmp.get(i);
             keyBuilder.append('|').append(action.id).append(action.iconRes).append(action.enabled);
             if (action.iconText != null) {
-                keyBuilder.append('"').append(action.iconText);
+                keyBuilder.append('"').append(action.arrow).append(action.iconText);
             }
         }
         actionsTmp.clear();
@@ -330,7 +331,7 @@ final class SystemHost {
                 actionIntents.put(action.id, pendingIntent);
             }
             final Icon icon = action.iconText != null
-                    ? actionTextIcon(activity, action.iconText)
+                    ? actionTextIcon(activity, action.iconText, action.arrow)
                     : actionIcon(activity, action.iconRes);
             final RemoteAction remoteAction = new RemoteAction(icon, action.title, action.title, pendingIntent);
             remoteAction.setEnabled(action.enabled);
@@ -417,9 +418,9 @@ final class SystemHost {
      * playback speed can be read off the small window.
      */
     @RequiresApi(api = Build.VERSION_CODES.O)
-    private @NonNull Icon actionTextIcon(@NonNull Activity host, @NonNull CharSequence text) {
+    private @NonNull Icon actionTextIcon(@NonNull Activity host, @NonNull CharSequence text, int arrow) {
         final String value = text.toString();
-        final String key = "t:" + value;
+        final String key = "t:" + arrow + ":" + value;
         final Icon cached = actionIcons.get(key);
         if (cached != null) {
             return cached;
@@ -430,6 +431,10 @@ final class SystemHost {
         final Canvas canvas = new Canvas(bitmap);
         final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setTypeface(AndroidUtilities.bold());
+        // the system gives the icon one small box and nothing else: the only lever left for visual
+        // weight is how thick the strokes are. The play/pause glyph is a solid shape, so plain bold
+        // text always looked lighter next to it.
+        paint.setFakeBoldText(true);
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(0xFFFFFFFF);
@@ -437,7 +442,9 @@ final class SystemHost {
         // fixed dp: a stroke outline on glyphs this small fills the gaps and the value turns into a blob
         float size = box;
         paint.setTextSize(size);
-        final float maxWidth = box * 0.95f;
+        // an arrow takes the corner, so the text is fitted to a slightly smaller square
+        final float textArea = arrow == 0 ? 0.97f : 0.84f;
+        final float maxWidth = box * textArea;
         final float width = paint.measureText(value);
         if (width > maxWidth && width > 0) {
             size = box * maxWidth / width;
@@ -447,7 +454,7 @@ final class SystemHost {
         // than the box and its edges would be cut off
         final Paint.FontMetrics probe = paint.getFontMetrics();
         final float textHeight = probe.descent - probe.ascent;
-        final float maxHeight = box * 0.8f;
+        final float maxHeight = box * (arrow == 0 ? 0.92f : 0.78f);
         if (textHeight > maxHeight) {
             size *= maxHeight / textHeight;
             paint.setTextSize(size);
@@ -456,10 +463,43 @@ final class SystemHost {
         paint.setShadowLayer(Math.max(1f, box * 0.07f), 0, 0, 0xCC000000);
         final Paint.FontMetrics fm = paint.getFontMetrics();
         final float y = box / 2f - (fm.ascent + fm.descent) / 2f;
-        canvas.drawText(value, box / 2f, y, paint);
+        final float textCenterX = arrow == 0 ? box / 2f : box * 0.44f;
+        canvas.drawText(value, textCenterX, y, paint);
+        if (arrow != 0) {
+            drawArrow(canvas, box, arrow > 0);
+        }
         final Icon icon = Icon.createWithBitmap(bitmap);
         actionIcons.put(key, icon);
         return icon;
+    }
+
+    /** The small solid triangle that says which way a seek entry goes. */
+    private void drawArrow(@NonNull Canvas canvas, int box, boolean forward) {
+        final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(0xFFFFFFFF);
+        paint.setShadowLayer(Math.max(1f, box * 0.07f), 0, 0, 0xCC000000);
+        // two stacked triangles read as "fast" rather than "play"
+        final float w = box * 0.16f;
+        final float h = box * 0.20f;
+        final float right = box * 0.97f;
+        final float cy = box / 2f;
+        for (int i = 0; i < 2; i++) {
+            final float tipX = right - i * w * 1.05f;
+            final float baseX = tipX - w;
+            final Path p = new Path();
+            if (forward) {
+                p.moveTo(tipX, cy);
+                p.lineTo(baseX, cy - h / 2f);
+                p.lineTo(baseX, cy + h / 2f);
+            } else {
+                p.moveTo(baseX, cy);
+                p.lineTo(tipX, cy - h / 2f);
+                p.lineTo(tipX, cy + h / 2f);
+            }
+            p.close();
+            canvas.drawPath(p, paint);
+        }
     }
 
     /** Enter system PiP right now, e.g. from a PiP button in the content's own UI. */

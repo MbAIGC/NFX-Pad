@@ -13,6 +13,11 @@ public final class PipAction {
      * so a value that changes (the playback speed) has to be in the icon to be visible.
      */
     public final @Nullable CharSequence iconText;
+    /**
+     * Direction marker drawn beside {@link #iconText}: 0 none, 1 seek forward, -1 seek back. A seek
+     * entry drawn as text needs it, or "10" alone says nothing about which way it goes.
+     */
+    public final int arrow;
     public final @NonNull CharSequence title;
     public final boolean enabled;
 
@@ -21,9 +26,14 @@ public final class PipAction {
     }
 
     public PipAction(int id, @DrawableRes int iconRes, @Nullable CharSequence iconText, @NonNull CharSequence title, boolean enabled) {
+        this(id, iconRes, iconText, 0, title, enabled);
+    }
+
+    public PipAction(int id, @DrawableRes int iconRes, @Nullable CharSequence iconText, int arrow, @NonNull CharSequence title, boolean enabled) {
         this.id = id;
         this.iconRes = iconRes;
         this.iconText = iconText;
+        this.arrow = arrow;
         this.title = title;
         this.enabled = enabled;
     }

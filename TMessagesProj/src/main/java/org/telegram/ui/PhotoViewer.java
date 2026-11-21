@@ -24500,8 +24500,10 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     formatSpeedNumber(currentVideoSpeed),
                     getString(R.string.VideoPlayerSpeed) + " " + speedText,
                     canChangeSpeed()));
+            // drawn as the value plus a direction marker: the Material circle glyph is thin enough
+            // that next to a solid play/pause shape it always looked smaller than it is
             actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_FORWARD, R.drawable.nfxp_forward_10,
-                    "+10s", seekable));
+                    "10", 1, "+10s", seekable));
             for (int i = 0; i < actions.size() && out.size() < maxActions; i++) {
                 out.add(actions.get(i));
             }
