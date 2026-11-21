@@ -98,6 +98,21 @@ jobs:
           export LOCAL_PROPERTIES="${{ secrets.LOCAL_PROPERTIES }}"
           export BUILD_TIMESTAMP=$(date +%s)
           ./gradlew TMessagesProj:assembleNormalStaging
+      - name: Show the api id baked into this build
+        # The id is not a secret (it travels in every request), the hash is, so only the id is shown.
+        # build.gradle falls back to the repository pair whenever the environment variable is empty,
+        # and that fallback is silent: reading the generated file is the only way to know what the
+        # dex really carries. Failing here stops a release that nobody could sign in with.
+        run: |
+          set -euo pipefail
+          f=$(find TMessagesProj/build/generated -name BuildConfig.java | head -1)
+          echo "generated: $f"
+          id=$(grep -oE 'int APP_ID = [0-9]+' "$f" | grep -oE '[0-9]+' || true)
+          echo "APP_ID baked into this build: ${id:-<not found>}"
+          if [ "${id:-0}" = "6" ]; then
+            echo "::error::this build carries the public test api id, the secret never reached build.gradle"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
