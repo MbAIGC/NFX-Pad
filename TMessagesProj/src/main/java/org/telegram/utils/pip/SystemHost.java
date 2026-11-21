@@ -416,6 +416,11 @@ final class SystemHost {
      * An action whose value is its icon: the value is drawn into the button box, in the same place a
      * resource glyph would be. The system draws no title, so this is the only way the current
      * playback speed can be read off the small window.
+     *
+     * <p>Width is what runs out first: "1.25x" is five glyphs in a square button, so the digits are
+     * condensed (TextScaleX 0.80) and their spacing tightened, the "x" is drawn smaller on the same
+     * baseline, and the result is cropped to its ink: the system fits the bitmap's bounding square
+     * into the button, so any margin left around the glyph is space the glyph does not get.
      */
     @RequiresApi(api = Build.VERSION_CODES.O)
     private @NonNull Icon actionTextIcon(@NonNull Activity host, @NonNull CharSequence text, int arrow) {
@@ -425,6 +430,10 @@ final class SystemHost {
         if (cached != null) {
             return cached;
         }
+        final boolean hasArrow = arrow != 0;
+        final boolean hasSuffix = value.length() > 1 && value.endsWith("x");
+        final String digits = hasSuffix ? value.substring(0, value.length() - 1) : value;
+
         final int box = Math.max(1, AndroidUtilities.dp(ACTION_ICON_BOX_DP));
         final Bitmap bitmap = Bitmap.createBitmap(box, box, Bitmap.Config.ARGB_8888);
         bitmap.setDensity(host.getResources().getDisplayMetrics().densityDpi);
@@ -435,71 +444,148 @@ final class SystemHost {
         // weight is how thick the strokes are. The play/pause glyph is a solid shape, so plain bold
         // text always looked lighter next to it.
         paint.setFakeBoldText(true);
-        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setTextAlign(Paint.Align.LEFT);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(0xFFFFFFFF);
-        // the button is about 24dp wide, so the size is what makes the text as wide as the box, not a
-        // fixed dp: a stroke outline on glyphs this small fills the gaps and the value turns into a blob
-        float size = box;
+        // a soft shadow instead of an outline: glyphs this small would fill their own counters
+        paint.setShadowLayer(Math.max(1f, box * 0.05f), 0, 0, 0xB3000000);
+        // condensed and tight: the same width then holds a larger type size, which is the only way a
+        // multi glyph value can grow inside a square button
+        paint.setTextScaleX(0.80f);
+        paint.setLetterSpacing(-0.04f);
+
+        // the marker and the "x" each get a strip of their own, so nothing ever shares pixels with
+        // the digits; the digits get what is left, which is where the larger type size comes from
+        final float zoneLeft = box * (hasArrow ? 0.02f : 0.0f);
+        final float zoneRight = box * (hasArrow ? 0.74f : 0.99f);
+        final float maxWidth = zoneRight - zoneLeft;
+        final float maxHeight = box * 0.94f;
+
+        final float suffixScale = 0.62f;
+        float size = maxHeight;
+        for (int i = 0; i < 8; i++) {
+            paint.setTextSize(size);
+            float width = paint.measureText(digits);
+            if (hasSuffix) {
+                paint.setTextSize(size * suffixScale);
+                width += paint.measureText("x");
+            }
+            if (width <= maxWidth && width > 0) {
+                break;
+            }
+            size *= maxWidth / width;
+            if (size <= 1f) {
+                size = 1f;
+                break;
+            }
+        }
         paint.setTextSize(size);
-        // an arrow takes the corner, so the text is fitted to a slightly smaller square
-        final float textArea = arrow == 0 ? 0.97f : 0.84f;
-        final float maxWidth = box * textArea;
-        final float width = paint.measureText(value);
-        if (width > maxWidth && width > 0) {
-            size = box * maxWidth / width;
-            paint.setTextSize(size);
-        }
-        // then the other direction: a single character fitted to the width alone would be taller
-        // than the box and its edges would be cut off
-        final Paint.FontMetrics probe = paint.getFontMetrics();
-        final float textHeight = probe.descent - probe.ascent;
-        final float maxHeight = box * (arrow == 0 ? 0.92f : 0.78f);
-        if (textHeight > maxHeight) {
-            size *= maxHeight / textHeight;
-            paint.setTextSize(size);
-        }
-        // a soft shadow instead of an outline: the window shows the video behind the button
-        paint.setShadowLayer(Math.max(1f, box * 0.07f), 0, 0, 0xCC000000);
         final Paint.FontMetrics fm = paint.getFontMetrics();
-        final float y = box / 2f - (fm.ascent + fm.descent) / 2f;
-        final float textCenterX = arrow == 0 ? box / 2f : box * 0.44f;
-        canvas.drawText(value, textCenterX, y, paint);
-        if (arrow != 0) {
+        if (fm.descent - fm.ascent > maxHeight) {
+            size *= maxHeight / (fm.descent - fm.ascent);
+            paint.setTextSize(size);
+        }
+        final Paint.FontMetrics metrics = paint.getFontMetrics();
+        final float baseline = box / 2f - (metrics.ascent + metrics.descent) / 2f;
+        paint.setTextSize(size);
+        final float digitsWidth = paint.measureText(digits);
+        float suffixWidth = 0;
+        if (hasSuffix) {
+            paint.setTextSize(size * suffixScale);
+            suffixWidth = paint.measureText("x");
+        }
+        // the whole line is centred in its zone: the ink crop then scales it as a unit, so a gap
+        // between the digits and the x would only make everything smaller
+        final float lineWidth = digitsWidth + suffixWidth;
+        final float startX = zoneLeft + (maxWidth - lineWidth) / 2f;
+        paint.setTextSize(size);
+        canvas.drawText(digits, startX, baseline, paint);
+        if (hasSuffix) {
+            // a small x on the same baseline, the way a speed value is usually written
+            paint.setTextSize(size * suffixScale);
+            canvas.drawText("x", startX + digitsWidth, baseline, paint);
+        }
+        if (hasArrow) {
             drawArrow(canvas, box, arrow > 0);
         }
-        final Icon icon = Icon.createWithBitmap(bitmap);
+        final Icon icon = Icon.createWithBitmap(cropToInk(bitmap));
         actionIcons.put(key, icon);
         return icon;
     }
 
-    /** The small solid triangle that says which way a seek entry goes. */
+    /**
+     * Crops the bitmap to what is actually drawn, as a square. The system fits the icon's bounding box
+     * into the button, so margins around the glyph waste exactly the space the glyph needs.
+     */
+    private static @NonNull Bitmap cropToInk(@NonNull Bitmap source) {
+        final int width = source.getWidth();
+        final int height = source.getHeight();
+        final int[] row = new int[width];
+        int left = width, top = height, right = -1, bottom = -1;
+        for (int y = 0; y < height; y++) {
+            source.getPixels(row, 0, width, 0, y, width, 1);
+            for (int x = 0; x < width; x++) {
+                final int pixel = row[x];
+                // the soft shadow is dark and would widen the crop: only bright ink counts
+                if (((pixel >>> 24) & 0xFF) > 24 && (pixel & 0x00FFFFFF) > 0x303030) {
+                    if (x < left) {
+                        left = x;
+                    }
+                    if (x > right) {
+                        right = x;
+                    }
+                    if (top == height) {
+                        top = y;
+                    }
+                    bottom = y;
+                }
+            }
+        }
+        if (right < left || bottom < top) {
+            return source;
+        }
+        int side = Math.max(right - left + 1, bottom - top + 1);
+        final int limit = Math.min(width, height);
+        if (side > limit) {
+            side = limit;
+        }
+        final int pad = Math.max(1, Math.round(side * 0.02f));
+        side = Math.min(limit, side + 2 * pad);
+        final int centerX = (left + right) / 2;
+        final int centerY = (top + bottom) / 2;
+        final int x = Math.max(0, Math.min(width - side, centerX - side / 2));
+        final int y = Math.max(0, Math.min(height - side, centerY - side / 2));
+        final Bitmap cropped = Bitmap.createBitmap(source, x, y, side, side);
+        // the crop is a new bitmap: keep the density, or the system scales it by the default one
+        cropped.setDensity(source.getDensity());
+        return cropped;
+    }
+
+    /**
+     * The solid triangle that says which way a seek entry goes. One marker, not two: two thin ones
+     * only made the digits smaller and still looked like a second glyph next to them.
+     */
     private void drawArrow(@NonNull Canvas canvas, int box, boolean forward) {
         final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(0xFFFFFFFF);
-        paint.setShadowLayer(Math.max(1f, box * 0.07f), 0, 0, 0xCC000000);
-        // two stacked triangles read as "fast" rather than "play"
-        final float w = box * 0.16f;
-        final float h = box * 0.20f;
-        final float right = box * 0.97f;
+        paint.setShadowLayer(Math.max(1f, box * 0.05f), 0, 0, 0xB3000000);
+        final float left = box * 0.78f;
+        final float right = box * 0.98f;
+        final float h = box * 0.44f;
         final float cy = box / 2f;
-        for (int i = 0; i < 2; i++) {
-            final float tipX = right - i * w * 1.05f;
-            final float baseX = tipX - w;
-            final Path p = new Path();
-            if (forward) {
-                p.moveTo(tipX, cy);
-                p.lineTo(baseX, cy - h / 2f);
-                p.lineTo(baseX, cy + h / 2f);
-            } else {
-                p.moveTo(baseX, cy);
-                p.lineTo(tipX, cy - h / 2f);
-                p.lineTo(tipX, cy + h / 2f);
-            }
-            p.close();
-            canvas.drawPath(p, paint);
+        final Path p = new Path();
+        if (forward) {
+            p.moveTo(right, cy);
+            p.lineTo(left, cy - h / 2f);
+            p.lineTo(left, cy + h / 2f);
+        } else {
+            p.moveTo(left, cy);
+            p.lineTo(right, cy - h / 2f);
+            p.lineTo(right, cy + h / 2f);
         }
+        p.close();
+        canvas.drawPath(p, paint);
     }
 
     /** Enter system PiP right now, e.g. from a PiP button in the content's own UI. */

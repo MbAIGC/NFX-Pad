@@ -24492,12 +24492,13 @@ public class PhotoViewer implements NotificationCenter.NotificationCenterDelegat
                     playing ? R.drawable.pip_pause_large : R.drawable.pip_play_large,
                     getString(playing ? R.string.AccActionPause : R.string.AccActionPlay),
                     hasSystemPlayPause()));
-            // the value is drawn into the button: 1.1x, 1.2x and 1.25x share one glyph, so a
-            // resource icon could not tell them apart and the system draws no title
+            // the value is drawn into the button, "1.25x" and all: 1.1, 1.2 and 1.25 share one
+            // resource glyph, so an icon could not tell them apart and the system draws no title.
+            // The renderer draws the trailing x smaller than the digits.
             final String speedText = formatVideoSpeed(currentVideoSpeed);
             actions.add(new org.telegram.utils.pip.PipAction(ACTION_PIP_SPEED,
                     speedIconRes(currentVideoSpeed),
-                    formatSpeedNumber(currentVideoSpeed),
+                    speedText,
                     getString(R.string.VideoPlayerSpeed) + " " + speedText,
                     canChangeSpeed()));
             // drawn as the value plus a direction marker: the Material circle glyph is thin enough
