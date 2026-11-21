@@ -108,11 +108,19 @@ jobs:
           f=$(find TMessagesProj/build/generated -name BuildConfig.java | head -1)
           echo "generated: $f"
           id=$(grep -oE 'int APP_ID = [0-9]+' "$f" | grep -oE '[0-9]+' || true)
-          echo "APP_ID baked into this build: ${id:-<not found>}"
-          if [ "${id:-0}" = "6" ]; then
-            echo "::error::this build carries the public test api id, the secret never reached build.gradle"
+          hash=$(grep -oE 'String APP_HASH = "[0-9a-f]+"' "$f" | grep -oE '[0-9a-f]{32}' || true)
+          echo "settings in the generated file: id set=$([ -n "$id" ] && echo yes || echo no), hash set=$([ -n "$hash" ] && echo yes || echo no)"
+          # Equality with the environment, not just "not the default": the two halves have to come
+          # from the same place, or the app signs in with an id from one build and a hash from another
+          [ "$id" = "${TELEGRAM_APP_ID:-}" ] || {
+            echo "::error::APP_ID in the build does not match the secret"
             exit 1
-          fi
+          }
+          [ "$hash" = "${TELEGRAM_APP_HASH:-}" ] || {
+            echo "::error::APP_HASH in the build does not match the secret"
+            exit 1
+          }
+          echo "build credentials match the secrets: id and hash both came from the same place"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
