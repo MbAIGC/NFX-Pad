@@ -73,9 +73,22 @@ jobs:
           python-version: '3.11.9'
       - name: Install Cython (Chaquopy bridge source build)
         run: pip install Cython==3.0.11
-      - name: Configure Android SDK Path
+      - name: Configure Android SDK Path and API credentials
+        # The credentials go into local.properties, which is where build.gradle reads them from
+        # (local.properties is gitignored and lives only on this runner for the length of the job).
+        # Environment variables are not used: a reused Gradle daemon would answer with the
+        # environment it started with, mixing an id from one run with a hash from another.
+        env:
+          TELEGRAM_APP_ID: ${{ secrets.TELEGRAM_APP_ID }}
+          TELEGRAM_APP_HASH: ${{ secrets.TELEGRAM_APP_HASH }}
         run: |
+          set -euo pipefail
           echo "sdk.dir=${ANDROID_HOME}" >> local.properties
+          id=$(printf '%s' "${TELEGRAM_APP_ID:-}" | tr -d '[:space:]')
+          hash=$(printf '%s' "${TELEGRAM_APP_HASH:-}" | tr -d '[:space:]')
+          [ -n "$id" ] && echo "TELEGRAM_APP_ID=$id" >> local.properties
+          [ -n "$hash" ] && echo "TELEGRAM_APP_HASH=$hash" >> local.properties
+          echo "local.properties written: sdk.dir, api id set=$([ -n "$id" ] && echo yes || echo no), hash set=$([ -n "$hash" ] && echo yes || echo no)"
       - name: Modify Gradle JVM Args
         run: |
           MEMORY_KB=$(awk '/MemTotal/ {print $2}' /proc/meminfo)
