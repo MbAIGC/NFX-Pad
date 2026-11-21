@@ -120,16 +120,19 @@ jobs:
           set -euo pipefail
           f=$(find TMessagesProj/build/generated -name BuildConfig.java | head -1)
           echo "generated: $f"
-          id=$(grep -oE 'int APP_ID = [0-9]+' "$f" | grep -oE '[0-9]+' || true)
+          grep -E 'int APP_ID|String APP_HASH' "$f" | sed -E 's/(APP_HASH = ")[^"]*(")/\1<redacted>\2/' || true
+          id=$(grep -oE 'int APP_ID = *[0-9]+' "$f" | grep -oE '[0-9]+' || true)
           hash=$(grep -oE 'String APP_HASH = "[0-9a-f]+"' "$f" | grep -oE '[0-9a-f]{32}' || true)
-          echo "settings in the generated file: id set=$([ -n "$id" ] && echo yes || echo no), hash set=$([ -n "$hash" ] && echo yes || echo no)"
-          # Equality with the environment, not just "not the default": the two halves have to come
-          # from the same place, or the app signs in with an id from one build and a hash from another
-          [ "$id" = "${TELEGRAM_APP_ID:-}" ] || {
+          wantId=$(printf '%s' "${TELEGRAM_APP_ID:-}" | tr -d '[:space:]')
+          wantHash=$(printf '%s' "${TELEGRAM_APP_HASH:-}" | tr -d '[:space:]')
+          echo "compare: generated id len=${#id} vs secret id len=${#wantId}; generated hash len=${#hash} vs secret hash len=${#wantHash}"
+          # Compare against the trimmed secret: the value written into local.properties is trimmed
+          # too, so a stray newline in the secret must not be reported as a mismatch here
+          [ "$id" = "$wantId" ] || {
             echo "::error::APP_ID in the build does not match the secret"
             exit 1
           }
-          [ "$hash" = "${TELEGRAM_APP_HASH:-}" ] || {
+          [ "$hash" = "$wantHash" ] || {
             echo "::error::APP_HASH in the build does not match the secret"
             exit 1
           }
