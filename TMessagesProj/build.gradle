@@ -205,12 +205,8 @@ android {
         def appId = '6'
         def appHash = 'eb06d4abfb49dc3eeb1aeb98ae0f581e'
         if (properties != null) {
-            // read from local.properties / LOCAL_PROPERTIES, exactly as upstream does. Environment
-            // variables are deliberately not consulted here: a reused Gradle daemon answers with the
-            // environment it started with, so a rebuilt APK could carry an id from one run and a hash
-            // from another, and signing in then fails with API_ID_INVALID.
-            appId = properties.getProperty('TELEGRAM_APP_ID') ?: appId
-            appHash = properties.getProperty('TELEGRAM_APP_HASH') ?: appHash
+            appId = properties.getProperty('TELEGRAM_APP_ID') ?: System.getenv('TELEGRAM_APP_ID') ?: appId
+            appHash = properties.getProperty('TELEGRAM_APP_HASH') ?: System.getenv('TELEGRAM_APP_HASH') ?: appHash
         }
 
         buildConfigField 'String', 'BUILD_VERSION_STRING', '"' + verName + '"'
